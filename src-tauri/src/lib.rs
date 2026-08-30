@@ -6,7 +6,7 @@ pub mod document_core;
 pub mod document_engine_host;
 mod editing_core;
 mod engineering;
-mod license;
+pub mod license;
 mod performance_reliability_core;
 mod reports;
 mod search_core;
