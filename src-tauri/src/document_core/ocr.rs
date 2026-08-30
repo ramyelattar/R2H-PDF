@@ -344,6 +344,12 @@ pub struct OcrCache {
     results: HashMap<OcrCacheKey, OcrPageResult>,
 }
 
+impl Default for OcrCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OcrCache {
     pub fn new() -> Self {
         Self {
@@ -410,7 +416,12 @@ pub struct OcrEngine {
     model_id: String,
     smoke_engine: Option<String>,
     default_dpi: u32,
-    timeout_secs: u64,
+}
+
+impl Default for OcrEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl OcrEngine {
@@ -430,7 +441,6 @@ impl OcrEngine {
             model_id: "PaddleOCR-VL".to_string(),
             smoke_engine: None,
             default_dpi: 200,
-            timeout_secs: 120,
         }
     }
 
@@ -1204,7 +1214,7 @@ fn validate_worker_response(
     }
 
     let text = response.text.as_deref().unwrap_or("").trim();
-    let blocks = response.blocks.as_ref().map(Vec::as_slice).unwrap_or(&[]);
+    let blocks = response.blocks.as_deref().unwrap_or(&[]);
     let status = response
         .status
         .as_deref()
@@ -1305,6 +1315,12 @@ fn validate_bbox(bbox: &WorkerBBox, width: f32, height: f32) -> Result<(), Worke
 pub struct OcrState {
     pub engine: Mutex<OcrEngine>,
     pub cancellations: Arc<Mutex<HashSet<String>>>,
+}
+
+impl Default for OcrState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl OcrState {

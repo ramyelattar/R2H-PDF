@@ -9,15 +9,15 @@
 //! arrays, multi-stream pages, and explicit font/encoding safety
 //! classification.
 
-use std::time::{SystemTime, UNIX_EPOCH};
-use mupdf::Buffer;
-use crate::document_core::DocumentCoreState;
-use super::types::*;
 use super::analysis::extract_page_content_objects;
 use super::stream_parser::{
     find_text_operations, replace_text_in_stream_encoded, text_matches, EncodingTarget,
     TextOperatorKind,
 };
+use super::types::*;
+use crate::document_core::DocumentCoreState;
+use mupdf::Buffer;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Phase 30D — verify that an edit actually changed the rendered page
 /// text. Loads `bytes` as a PDF via MuPDF, extracts the text for the
@@ -35,13 +35,18 @@ pub fn verify_text_present_in_page(
     }
     let pdf = mupdf::pdf::PdfDocument::from_bytes(bytes)
         .map_err(|e| format!("verify: from_bytes: {e}"))?;
-    let count = pdf.page_count().map_err(|e| format!("verify: page_count: {e}"))?;
+    let count = pdf
+        .page_count()
+        .map_err(|e| format!("verify: page_count: {e}"))?;
     let pno = i32::try_from(page_index).map_err(|e| format!("verify: page_index: {e}"))?;
     if pno >= count {
         return Err(format!("verify: page {pno} out of range ({count} pages)"));
     }
-    let page = pdf.load_page(pno).map_err(|e| format!("verify: load_page: {e}"))?;
-    let tp = page.to_text_page(mupdf::TextPageFlags::empty())
+    let page = pdf
+        .load_page(pno)
+        .map_err(|e| format!("verify: load_page: {e}"))?;
+    let tp = page
+        .to_text_page(mupdf::TextPageFlags::empty())
         .map_err(|e| format!("verify: to_text_page: {e}"))?;
     let mut acc = String::new();
     for block in tp.blocks() {
@@ -135,11 +140,13 @@ pub fn classify_text_edit_strategy_with_options(
     // Empty replacements are not a useful native edit but they should
     // not be silently rejected either — the caller will see a no-op.
     if replacement_text.is_empty() {
-        warnings.push("Replacement text is empty — no native operator change will be emitted.".to_string());
+        warnings.push(
+            "Replacement text is empty — no native operator change will be emitted.".to_string(),
+        );
     }
 
     // Detect the kind of characters in the replacement once.
-    let has_non_ascii = replacement_text.chars().any(|c| !c.is_ascii());
+    let has_non_ascii = !replacement_text.is_ascii();
     let outside_latin1 = replacement_text.chars().any(|c| (c as u32) > 0x00FF);
     let has_cjk = replacement_text.chars().any(|c| {
         let cp = c as u32;
@@ -153,7 +160,8 @@ pub fn classify_text_edit_strategy_with_options(
     });
 
     // Try to find the matching font resource in the registry.
-    let info = font_resource_name.and_then(|name| registry_fonts.iter().find(|f| f.resource_name == name));
+    let info =
+        font_resource_name.and_then(|name| registry_fonts.iter().find(|f| f.resource_name == name));
 
     if let Some(info) = info {
         // ── Registry path: honest, per-font decision. ────────────────
@@ -163,7 +171,8 @@ pub fn classify_text_edit_strategy_with_options(
                 font_preserved: false,
                 encoding_safe: false,
                 reasons: vec![
-                    "CJK shaping required — native PDF text editing not supported in this build.".to_string(),
+                    "CJK shaping required — native PDF text editing not supported in this build."
+                        .to_string(),
                 ],
                 warnings: info.unsupported_reasons.clone(),
                 source: "font_registry",
@@ -215,7 +224,7 @@ pub fn classify_text_edit_strategy_with_options(
             // success without verified bytes. When the experimental flag
             // is on AND a reverse map is ready, surface the honest fact
             // that we could *in principle* use it, but still fall back.
-            let mut reasons = vec![
+            let reasons = vec![
                 "Type0 / Identity-H font: native edit requires CID reverse mapping which is not implemented.".to_string(),
             ];
             let mut warnings = info.unsupported_reasons.clone();
@@ -386,7 +395,9 @@ pub fn classify_font_replacement_safety(
     // Subset fonts are prefixed by exactly 6 uppercase letters then '+'.
     let subset = font_name.len() > 7
         && font_name.as_bytes().get(6) == Some(&b'+')
-        && font_name.as_bytes()[..6].iter().all(|b| (b'A'..=b'Z').contains(b));
+        && font_name.as_bytes()[..6]
+            .iter()
+            .all(|b: &u8| b.is_ascii_uppercase());
     if subset {
         native_safe = false;
         reasons.push(
@@ -395,7 +406,7 @@ pub fn classify_font_replacement_safety(
         );
     }
 
-    let has_non_ascii = replacement.chars().any(|c| !c.is_ascii());
+    let has_non_ascii = !replacement.is_ascii();
     let has_cjk = replacement.chars().any(|c| {
         let cp = c as u32;
         (0x4E00..=0x9FFF).contains(&cp)
@@ -475,7 +486,9 @@ pub fn apply_native_text_edit(
 
     // 1. Verify the content object exists and is editable.
     let objects = extract_page_content_objects(doc_state, &request.session_id, request.page_index)?;
-    let target = objects.iter().find(|o| o.id == request.content_object_id)
+    let target = objects
+        .iter()
+        .find(|o| o.id == request.content_object_id)
         .ok_or_else(|| format!("Content object not found: {}", request.content_object_id))?;
 
     if target.editable_level == EditableLevel::ReadOnly {
@@ -485,7 +498,11 @@ pub fn apply_native_text_edit(
             page_index: request.page_index,
             content_object_id: request.content_object_id.clone(),
             method: EditMethod::Rejected,
-            original_text: target.text_info.as_ref().map(|t| t.decoded_text.clone()).unwrap_or_default(),
+            original_text: target
+                .text_info
+                .as_ref()
+                .map(|t| t.decoded_text.clone())
+                .unwrap_or_default(),
             replacement_text: request.replacement_text.clone(),
             success: false,
             warnings: vec!["Object is read-only and cannot be edited.".to_string()],
@@ -494,7 +511,9 @@ pub fn apply_native_text_edit(
         });
     }
 
-    let text_info = target.text_info.as_ref()
+    let text_info = target
+        .text_info
+        .as_ref()
         .ok_or_else(|| "Target object has no text info".to_string())?;
 
     if target.editable_level == EditableLevel::VisualPatchOnly {
@@ -523,7 +542,9 @@ pub fn apply_native_text_edit(
     // visual replacement immediately with the precise reasons in
     // warnings — no silent fallback.
     let registry_fonts = super::font_registry::build_page_font_registry(
-        doc_state, &request.session_id, request.page_index,
+        doc_state,
+        &request.session_id,
+        request.page_index,
     )
     .map(|r| r.fonts)
     .unwrap_or_default();
@@ -554,11 +575,16 @@ pub fn apply_native_text_edit(
     }
     if matches!(strategy.strategy, TextEditStrategy::SafeVisualReplacement) {
         let mut result = apply_safe_visual_replacement(
-            doc_state, request, &edit_id, &original_text, bbox, font_size,
+            doc_state,
+            request,
+            &edit_id,
+            &original_text,
+            bbox,
+            font_size,
         )?;
         let mut combined: Vec<String> = strategy.reasons.clone();
         combined.extend(strategy.warnings.clone());
-        combined.extend(result.warnings.drain(..));
+        combined.append(&mut result.warnings);
         result.warnings = combined;
         return Ok(result);
     }
@@ -577,15 +603,23 @@ pub fn apply_native_text_edit(
             // Phase 30D — verify the edit BEFORE committing to session.
             // We rollback (don't commit) when verification fails so the
             // user never sees a "succeeded" status without byte changes.
-            let mut verification = VerificationStatus::NotRun;
+            let verification;
             let mut verification_warnings: Vec<String> = Vec::new();
             let prior_bytes = {
-                let arc = doc_state.store.get_session_arc_pub(&request.session_id)
+                let arc = doc_state
+                    .store
+                    .get_session_arc_pub(&request.session_id)
                     .map_err(|e| e.to_string())?;
-                let s = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+                let s = arc
+                    .lock()
+                    .map_err(|_| "session lock poisoned".to_string())?;
                 s.document.bytes.clone()
             };
-            match verify_text_present_in_page(&new_bytes, request.page_index, &request.replacement_text) {
+            match verify_text_present_in_page(
+                &new_bytes,
+                request.page_index,
+                &request.replacement_text,
+            ) {
                 Ok(true) => {
                     verification = VerificationStatus::Passed;
                 }
@@ -607,9 +641,13 @@ pub fn apply_native_text_edit(
 
             if verification == VerificationStatus::Failed {
                 // Rollback — keep the session bytes at the snapshot.
-                let arc = doc_state.store.get_session_arc_pub(&request.session_id)
+                let arc = doc_state
+                    .store
+                    .get_session_arc_pub(&request.session_id)
                     .map_err(|e| e.to_string())?;
-                let mut session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+                let mut session = arc
+                    .lock()
+                    .map_err(|_| "session lock poisoned".to_string())?;
                 session.document.bytes = prior_bytes;
                 session.invalidate_cached_document();
                 return Ok(NativeTextEditResult {
@@ -627,14 +665,18 @@ pub fn apply_native_text_edit(
                 });
             }
 
-            let arc = doc_state.store.get_session_arc_pub(&request.session_id)
+            let arc = doc_state
+                .store
+                .get_session_arc_pub(&request.session_id)
                 .map_err(|e| e.to_string())?;
-            let mut session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+            let mut session = arc
+                .lock()
+                .map_err(|_| "session lock poisoned".to_string())?;
             session.document.bytes = new_bytes;
             session.is_dirty = true;
             session.invalidate_cached_document();
 
-            return Ok(NativeTextEditResult {
+            Ok(NativeTextEditResult {
                 edit_id: format!("edit-native-{}", epoch_ms()),
                 session_id: request.session_id.clone(),
                 page_index: request.page_index,
@@ -652,11 +694,11 @@ pub fn apply_native_text_edit(
                 ],
                 verification,
                 verification_warnings,
-            });
+            })
         }
         NativeEditAttempt::Rejected { reasons } => {
             // Explicit rejection — do not silently fall back.
-            return Ok(NativeTextEditResult {
+            Ok(NativeTextEditResult {
                 edit_id,
                 session_id: request.session_id.clone(),
                 page_index: request.page_index,
@@ -668,19 +710,24 @@ pub fn apply_native_text_edit(
                 warnings: reasons,
                 verification: VerificationStatus::NotRun,
                 verification_warnings: vec![],
-            });
+            })
         }
         NativeEditAttempt::Skipped { reasons } => {
             // 3. Fallback: Safe visual replacement (redact + Helvetica)
             //    with the explicit reasons surfaced in warnings.
             let mut result = apply_safe_visual_replacement(
-                doc_state, request, &edit_id, &original_text, bbox, font_size,
+                doc_state,
+                request,
+                &edit_id,
+                &original_text,
+                bbox,
+                font_size,
             )?;
             // Prepend the reasons so the UI shows why we fell back.
             let mut combined = reasons;
-            combined.extend(result.warnings.drain(..));
+            combined.append(&mut result.warnings);
             result.warnings = combined;
-            return Ok(result);
+            Ok(result)
         }
     }
 }
@@ -714,35 +761,41 @@ fn attempt_true_native_edit(
     original_text: &str,
     objects: &[ContentObject],
 ) -> Result<NativeEditAttempt, String> {
-    let arc = doc_state.store.get_session_arc_pub(&request.session_id)
+    let arc = doc_state
+        .store
+        .get_session_arc_pub(&request.session_id)
         .map_err(|e| e.to_string())?;
     let session_bytes = {
-        let s = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+        let s = arc
+            .lock()
+            .map_err(|_| "session lock poisoned".to_string())?;
         s.document.bytes.clone()
     };
 
     let pdf = mupdf::pdf::PdfDocument::from_bytes(&session_bytes)
         .map_err(|e| format!("Failed to open PDF: {e}"))?;
 
-    let page_no = i32::try_from(request.page_index)
-        .map_err(|e| format!("page index: {e}"))?;
+    let page_no = i32::try_from(request.page_index).map_err(|e| format!("page index: {e}"))?;
 
-    let fz_page = pdf.load_page(page_no)
+    let fz_page = pdf
+        .load_page(page_no)
         .map_err(|e| format!("load_page: {e}"))?;
-    let pdf_page = mupdf::pdf::PdfPage::try_from(fz_page)
-        .map_err(|e| format!("PdfPage: {e}"))?;
+    let pdf_page = mupdf::pdf::PdfPage::try_from(fz_page).map_err(|e| format!("PdfPage: {e}"))?;
 
     let page_obj = pdf_page.object();
     let contents_obj = match page_obj.get_dict("Contents") {
         Ok(Some(c)) => c,
-        _ => return Ok(NativeEditAttempt::Skipped {
-            reasons: vec!["Page has no /Contents stream.".to_string()],
-        }),
+        _ => {
+            return Ok(NativeEditAttempt::Skipped {
+                reasons: vec!["Page has no /Contents stream.".to_string()],
+            })
+        }
     };
 
     // Phase 28B — discover the candidate streams. /Contents may be a
     // single stream or an array of streams; we walk both shapes.
-    let streams: Vec<(usize, mupdf::pdf::PdfObject)> = if contents_obj.is_stream().unwrap_or(false) {
+    let streams: Vec<(usize, mupdf::pdf::PdfObject)> = if contents_obj.is_stream().unwrap_or(false)
+    {
         vec![(0, contents_obj.clone())]
     } else if contents_obj.is_array().unwrap_or(false) {
         let len = contents_obj.len().unwrap_or(0);
@@ -770,7 +823,8 @@ fn attempt_true_native_edit(
     }
 
     // Identify the target text object's occurrence and operator hints.
-    let target = objects.iter()
+    let target = objects
+        .iter()
         .find(|o| o.id == request.content_object_id)
         .and_then(|o| o.text_info.as_ref());
     let occurrence_index = target.map(|t| t.occurrence_index).unwrap_or(0);
@@ -784,7 +838,8 @@ fn attempt_true_native_edit(
     }
     let mut candidates: Vec<Candidate> = Vec::new();
     for (stream_index, stream_obj) in &streams {
-        let bytes = stream_obj.read_stream()
+        let bytes = stream_obj
+            .read_stream()
             .map_err(|e| format!("read_stream {stream_index}: {e}"))?;
         let ops = find_text_operations(&bytes);
         for op in ops {
@@ -827,15 +882,24 @@ fn attempt_true_native_edit(
     if chosen.op.is_hex_encoded || chosen.op.kind == TextOperatorKind::Hex {
         return Ok(NativeEditAttempt::Skipped {
             reasons: vec![
-                "Hex-encoded glyph string — native edit is not safe without a CMap/ToUnicode map.".to_string(),
+                "Hex-encoded glyph string — native edit is not safe without a CMap/ToUnicode map."
+                    .to_string(),
             ],
         });
     }
 
     // Phase 28C — font + encoding safety classification.
-    let font_name = chosen.op.font_name.clone().unwrap_or_else(|| "Unknown".to_string());
+    let font_name = chosen
+        .op
+        .font_name
+        .clone()
+        .unwrap_or_else(|| "Unknown".to_string());
     let encoding = font_encoding_for(&pdf_page, &font_name);
-    let decision = classify_font_replacement_safety(&font_name, encoding.as_deref(), &request.replacement_text);
+    let decision = classify_font_replacement_safety(
+        &font_name,
+        encoding.as_deref(),
+        &request.replacement_text,
+    );
     if !decision.native_safe {
         return Ok(NativeEditAttempt::Skipped {
             reasons: decision.reasons,
@@ -848,17 +912,22 @@ fn attempt_true_native_edit(
     // (which the earlier registry pre-flight would have caught for
     // non-ASCII replacements; ASCII can safely use the plain path).
     let registry_for_byte_emission = super::font_registry::build_page_font_registry(
-        doc_state, &request.session_id, request.page_index,
+        doc_state,
+        &request.session_id,
+        request.page_index,
     )
     .map(|r| r.fonts)
     .unwrap_or_default();
-    let target_font_name = objects.iter()
+    let target_font_name = objects
+        .iter()
         .find(|o| o.id == request.content_object_id)
         .and_then(|o| o.text_info.as_ref())
         .map(|t| t.font_name.clone());
-    let font_info = target_font_name
-        .as_deref()
-        .and_then(|n| registry_for_byte_emission.iter().find(|f| f.resource_name == n));
+    let font_info = target_font_name.as_deref().and_then(|n| {
+        registry_for_byte_emission
+            .iter()
+            .find(|f| f.resource_name == n)
+    });
 
     let new_stream_bytes = match font_info {
         Some(info)
@@ -893,11 +962,11 @@ fn attempt_true_native_edit(
                 &info.differences,
             );
             match fmap.forward_lookup(&request.replacement_text) {
-                Ok(bytes) => {
-                    super::stream_parser::replace_text_in_stream_with_bytes(
-                        &chosen.bytes, &chosen.op, &bytes,
-                    )
-                }
+                Ok(bytes) => super::stream_parser::replace_text_in_stream_with_bytes(
+                    &chosen.bytes,
+                    &chosen.op,
+                    &bytes,
+                ),
                 Err(missing) => {
                     let chars: String = missing.iter().collect();
                     return Ok(NativeEditAttempt::Skipped {
@@ -920,7 +989,10 @@ fn attempt_true_native_edit(
                 _ => EncodingTarget::Ascii,
             };
             replace_text_in_stream_encoded(
-                &chosen.bytes, &chosen.op, &request.replacement_text, target,
+                &chosen.bytes,
+                &chosen.op,
+                &request.replacement_text,
+                target,
             )
         }
     };
@@ -930,19 +1002,22 @@ fn attempt_true_native_edit(
     // a silent no-op.
     if new_stream_bytes == chosen.bytes {
         return Ok(NativeEditAttempt::Rejected {
-            reasons: vec!["Native edit produced identical stream bytes; refusing to mutate.".to_string()],
+            reasons: vec![
+                "Native edit produced identical stream bytes; refusing to mutate.".to_string(),
+            ],
         });
     }
 
     // Write modified stream back into the page object.
-    let stream_obj = &streams[
-        streams.iter().position(|(idx, _)| *idx == chosen.stream_index)
-            .ok_or_else(|| "stream index not found".to_string())?
-    ].1;
-    let buf = Buffer::from_bytes(&new_stream_bytes)
-        .map_err(|e| format!("Buffer: {e}"))?;
+    let stream_obj = &streams[streams
+        .iter()
+        .position(|(idx, _)| *idx == chosen.stream_index)
+        .ok_or_else(|| "stream index not found".to_string())?]
+    .1;
+    let buf = Buffer::from_bytes(&new_stream_bytes).map_err(|e| format!("Buffer: {e}"))?;
     let mut stream_mut = stream_obj.clone();
-    stream_mut.write_stream_buffer(&buf)
+    stream_mut
+        .write_stream_buffer(&buf)
         .map_err(|e| format!("write_stream_buffer: {e}"))?;
 
     let mut new_bytes: Vec<u8> = Vec::new();
@@ -953,7 +1028,8 @@ fn attempt_true_native_edit(
     if new_bytes == session_bytes {
         return Ok(NativeEditAttempt::Rejected {
             reasons: vec![
-                "Native edit serialized identical PDF bytes; refusing to claim success.".to_string(),
+                "Native edit serialized identical PDF bytes; refusing to claim success."
+                    .to_string(),
             ],
         });
     }
@@ -979,13 +1055,22 @@ fn font_encoding_for(pdf_page: &mupdf::pdf::PdfPage, font_resource_name: &str) -
     let encoding = resolved.get_dict("Encoding").ok().flatten()?;
     // Encoding can be a name (`/WinAnsiEncoding`) or a dict containing
     // BaseEncoding + Differences. We read the name form first.
-    let resolved_enc = encoding.resolve().ok().flatten().unwrap_or(encoding.clone());
+    let resolved_enc = encoding
+        .resolve()
+        .ok()
+        .flatten()
+        .unwrap_or(encoding.clone());
     if resolved_enc.is_name().unwrap_or(false) {
-        return resolved_enc.as_name().ok().map(|bytes| String::from_utf8_lossy(bytes).into_owned());
+        return resolved_enc
+            .as_name()
+            .ok()
+            .map(|bytes| String::from_utf8_lossy(bytes).into_owned());
     }
     // Otherwise look for BaseEncoding inside the dict.
     let base = resolved_enc.get_dict("BaseEncoding").ok().flatten()?;
-    base.as_name().ok().map(|bytes| String::from_utf8_lossy(bytes).into_owned())
+    base.as_name()
+        .ok()
+        .map(|bytes| String::from_utf8_lossy(bytes).into_owned())
 }
 
 /// Phase 32A — compute the cover rect used by safe visual replacement.
@@ -1021,7 +1106,13 @@ pub fn build_safe_visual_replacement_ops(
     font_size: f32,
     replacement: &str,
 ) -> String {
-    build_safe_visual_replacement_ops_with_color(cover_rect, text_bbox, font_size, replacement, [1.0, 1.0, 1.0])
+    build_safe_visual_replacement_ops_with_color(
+        cover_rect,
+        text_bbox,
+        font_size,
+        replacement,
+        [1.0, 1.0, 1.0],
+    )
 }
 
 pub fn build_safe_visual_replacement_ops_with_color(
@@ -1086,20 +1177,24 @@ fn apply_safe_visual_replacement(
         }
     };
 
-    let arc = doc_state.store.get_session_arc_pub(&request.session_id)
+    let arc = doc_state
+        .store
+        .get_session_arc_pub(&request.session_id)
         .map_err(|e| e.to_string())?;
-    let mut session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+    let mut session = arc
+        .lock()
+        .map_err(|_| "session lock poisoned".to_string())?;
 
     let mut pdf = mupdf::pdf::PdfDocument::from_bytes(&session.document.bytes)
         .map_err(|e| format!("Failed to open PDF for editing: {e}"))?;
 
-    let page_no = i32::try_from(request.page_index)
-        .map_err(|e| format!("page index: {e}"))?;
+    let page_no = i32::try_from(request.page_index).map_err(|e| format!("page index: {e}"))?;
 
-    let fz_page = pdf.load_page(page_no)
+    let fz_page = pdf
+        .load_page(page_no)
         .map_err(|e| format!("load_page: {e}"))?;
-    let mut pdf_page = mupdf::pdf::PdfPage::try_from(fz_page)
-        .map_err(|e| format!("PdfPage: {e}"))?;
+    let mut pdf_page =
+        mupdf::pdf::PdfPage::try_from(fz_page).map_err(|e| format!("PdfPage: {e}"))?;
     let bg_sample = super::background_sampling::sample_page_background(
         doc_state,
         &request.session_id,
@@ -1112,15 +1207,18 @@ fn apply_safe_visual_replacement(
     // explicit cover rect drawn below is the load-bearing mechanism; the
     // redact is belt-and-braces.
     let redact_rect = mupdf::Rect::new(cover_rect[0], cover_rect[1], cover_rect[2], cover_rect[3]);
-    let mut redact_annot = pdf_page.create_annotation(mupdf::pdf::PdfAnnotationType::Redact)
+    let mut redact_annot = pdf_page
+        .create_annotation(mupdf::pdf::PdfAnnotationType::Redact)
         .map_err(|e| format!("create redact: {e}"))?;
-    redact_annot.set_rect(redact_rect)
+    redact_annot
+        .set_rect(redact_rect)
         .map_err(|e| format!("set_rect: {e}"))?;
-    redact_annot.set_color(mupdf::color::AnnotationColor::Rgb {
-        red: bg_sample.rgb[0],
-        green: bg_sample.rgb[1],
-        blue: bg_sample.rgb[2],
-    })
+    redact_annot
+        .set_color(mupdf::color::AnnotationColor::Rgb {
+            red: bg_sample.rgb[0],
+            green: bg_sample.rgb[1],
+            blue: bg_sample.rgb[2],
+        })
         .map_err(|e| format!("set_color: {e}"))?;
     drop(redact_annot);
     pdf_page.redact().map_err(|e| format!("redact: {e}"))?;
@@ -1133,10 +1231,15 @@ fn apply_safe_visual_replacement(
     // the replacement text so the new glyphs paint on top of a clean
     // background and the original text is fully hidden.
     let text_ops = build_safe_visual_replacement_ops_with_color(
-        cover_rect, bbox, font_size, &request.replacement_text, bg_sample.rgb,
+        cover_rect,
+        bbox,
+        font_size,
+        &request.replacement_text,
+        bg_sample.rgb,
     );
 
-    if let Err(e) = append_safe_visual_ops_to_page_contents(&mut pdf, request.page_index, &text_ops) {
+    if let Err(e) = append_safe_visual_ops_to_page_contents(&mut pdf, request.page_index, &text_ops)
+    {
         return Ok(NativeTextEditResult {
             edit_id: edit_id.to_string(),
             session_id: request.session_id.clone(),
@@ -1172,16 +1275,14 @@ fn apply_safe_visual_replacement(
         replacement_text: request.replacement_text.clone(),
         success: true,
         warnings: {
-            let mut warnings = vec![
-                if bg_sample.used_fallback {
-                    "Safe visual replacement: original text bbox covered with a padded white rectangle and redacted, replacement drawn with Helvetica on top. Original font not preserved.".to_string()
-                } else {
-                    format!(
+            let mut warnings = vec![if bg_sample.used_fallback {
+                "Safe visual replacement: original text bbox covered with a padded white rectangle and redacted, replacement drawn with Helvetica on top. Original font not preserved.".to_string()
+            } else {
+                format!(
                         "Safe visual replacement: sampled background cover color rgb({:.3}, {:.3}, {:.3}) used, original text redacted, replacement drawn with Helvetica on top. Original font not preserved.",
                         bg_sample.rgb[0], bg_sample.rgb[1], bg_sample.rgb[2]
                     )
-                },
-            ];
+            }];
             if let Some(w) = bg_sample.warning {
                 warnings.push(w);
             }
@@ -1213,8 +1314,7 @@ fn append_safe_visual_ops_to_page_contents(
         .write_stream_string(ops)
         .map_err(|e| format!("write_stream_string (safe visual stream): {e}"))?;
 
-    let page_no = i32::try_from(page_index)
-        .map_err(|e| format!("page index: {e}"))?;
+    let page_no = i32::try_from(page_index).map_err(|e| format!("page index: {e}"))?;
     let mut page_dict = pdf
         .find_page(page_no)
         .map_err(|e| format!("find_page for safe visual append: {e}"))?;
@@ -1251,7 +1351,10 @@ fn append_safe_visual_ops_to_page_contents(
 }
 
 /// Ensure the page has a Helvetica font resource named /R2HHelv.
-fn ensure_helvetica_resource(pdf: &mupdf::pdf::PdfDocument, page_obj: &mupdf::pdf::PdfObject) -> Result<(), String> {
+fn ensure_helvetica_resource(
+    pdf: &mupdf::pdf::PdfDocument,
+    page_obj: &mupdf::pdf::PdfObject,
+) -> Result<(), String> {
     let resources = match page_obj.get_dict("Resources") {
         Ok(Some(r)) => r,
         _ => return Ok(()),
@@ -1263,9 +1366,13 @@ fn ensure_helvetica_resource(pdf: &mupdf::pdf::PdfDocument, page_obj: &mupdf::pd
             let mut new_font_dict = pdf.new_dict().map_err(|e| format!("new_dict: {e}"))?;
             let helv = pdf.new_object_from_str("<</Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding>>")
                 .map_err(|e| format!("new_object_from_str: {e}"))?;
-            new_font_dict.dict_put("R2HHelv", helv).map_err(|e| format!("dict_put: {e}"))?;
+            new_font_dict
+                .dict_put("R2HHelv", helv)
+                .map_err(|e| format!("dict_put: {e}"))?;
             let mut resources_mut = resources;
-            resources_mut.dict_put("Font", new_font_dict).map_err(|e| format!("dict_put Font: {e}"))?;
+            resources_mut
+                .dict_put("Font", new_font_dict)
+                .map_err(|e| format!("dict_put Font: {e}"))?;
             return Ok(());
         }
         Err(e) => return Err(format!("get Font dict: {e}")),
@@ -1275,22 +1382,30 @@ fn ensure_helvetica_resource(pdf: &mupdf::pdf::PdfDocument, page_obj: &mupdf::pd
         return Ok(());
     }
 
-    let helv = pdf.new_object_from_str("<</Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding>>")
+    let helv = pdf
+        .new_object_from_str(
+            "<</Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding>>",
+        )
         .map_err(|e| format!("new_object_from_str: {e}"))?;
     let mut font_dict_mut = font_dict;
-    font_dict_mut.dict_put("R2HHelv", helv).map_err(|e| format!("dict_put R2HHelv: {e}"))?;
+    font_dict_mut
+        .dict_put("R2HHelv", helv)
+        .map_err(|e| format!("dict_put R2HHelv: {e}"))?;
 
     Ok(())
 }
 
 fn pdf_escape_string(s: &str) -> String {
     s.replace('\\', "\\\\")
-     .replace('(', "\\(")
-     .replace(')', "\\)")
+        .replace('(', "\\(")
+        .replace(')', "\\)")
 }
 
 fn epoch_ms() -> u128 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
 }
 
 #[cfg(test)]
@@ -1318,9 +1433,13 @@ mod tests {
 
     #[test]
     fn subset_font_is_unsafe() {
-        let d = classify_font_replacement_safety("ABCDEF+SubsetFont", Some("WinAnsiEncoding"), "Hello");
+        let d =
+            classify_font_replacement_safety("ABCDEF+SubsetFont", Some("WinAnsiEncoding"), "Hello");
         assert!(!d.native_safe);
-        assert!(d.reasons.iter().any(|r| r.to_lowercase().contains("subset")));
+        assert!(d
+            .reasons
+            .iter()
+            .any(|r| r.to_lowercase().contains("subset")));
     }
 
     #[test]
@@ -1334,7 +1453,10 @@ mod tests {
     fn arabic_replacement_is_unsafe() {
         let d = classify_font_replacement_safety("Helvetica", Some("WinAnsiEncoding"), "مرحبا");
         assert!(!d.native_safe);
-        assert!(d.reasons.iter().any(|r| r.to_lowercase().contains("arabic")));
+        assert!(d
+            .reasons
+            .iter()
+            .any(|r| r.to_lowercase().contains("arabic")));
     }
 
     #[test]
@@ -1347,7 +1469,10 @@ mod tests {
     fn non_ascii_with_unknown_encoding_is_unsafe() {
         let d = classify_font_replacement_safety("Helvetica", None, "café");
         assert!(!d.native_safe);
-        assert!(d.reasons.iter().any(|r| r.to_lowercase().contains("cannot be verified")));
+        assert!(d
+            .reasons
+            .iter()
+            .any(|r| r.to_lowercase().contains("cannot be verified")));
     }
 
     // ─── Phase 29B: registry-backed strategy decision ─────────────
@@ -1357,12 +1482,16 @@ mod tests {
         subtype: &str,
         enc: super::super::font_registry::EncodingKind,
         subset: bool,
-        type0: bool,
+        _type0: bool,
         type3: bool,
     ) -> super::super::font_registry::FontResourceInfo {
         super::super::font_registry::classify_font_info_from_parts(
             name,
-            if subset { "ABCDEF+SomeFont" } else { "SomeFont" },
+            if subset {
+                "ABCDEF+SomeFont"
+            } else {
+                "SomeFont"
+            },
             subtype,
             enc,
             Some("WinAnsiEncoding".to_string()),
@@ -1379,8 +1508,12 @@ mod tests {
     #[test]
     fn registry_path_picks_native_for_ascii_in_winansi() {
         let info = font_info(
-            "F1", "Type1", super::super::font_registry::EncodingKind::WinAnsi,
-            false, false, false,
+            "F1",
+            "Type1",
+            super::super::font_registry::EncodingKind::WinAnsi,
+            false,
+            false,
+            false,
         );
         let d = classify_text_edit_strategy(Some("F1"), &[info], "Hello");
         assert!(matches!(d.strategy, TextEditStrategy::NativeInPlace));
@@ -1391,8 +1524,12 @@ mod tests {
     #[test]
     fn registry_path_allows_latin1_in_winansi() {
         let info = font_info(
-            "F1", "Type1", super::super::font_registry::EncodingKind::WinAnsi,
-            false, false, false,
+            "F1",
+            "Type1",
+            super::super::font_registry::EncodingKind::WinAnsi,
+            false,
+            false,
+            false,
         );
         let d = classify_text_edit_strategy(Some("F1"), &[info], "café");
         assert!(matches!(d.strategy, TextEditStrategy::NativeInPlace));
@@ -1402,31 +1539,55 @@ mod tests {
     #[test]
     fn registry_path_rejects_subset_font_to_visual() {
         let info = font_info(
-            "F1", "Type1", super::super::font_registry::EncodingKind::WinAnsi,
-            true, false, false,
+            "F1",
+            "Type1",
+            super::super::font_registry::EncodingKind::WinAnsi,
+            true,
+            false,
+            false,
         );
         let d = classify_text_edit_strategy(Some("F1"), &[info], "Hello");
-        assert!(matches!(d.strategy, TextEditStrategy::SafeVisualReplacement));
+        assert!(matches!(
+            d.strategy,
+            TextEditStrategy::SafeVisualReplacement
+        ));
         assert!(!d.font_preserved);
-        assert!(d.reasons.iter().any(|r| r.to_lowercase().contains("subset")));
+        assert!(d
+            .reasons
+            .iter()
+            .any(|r| r.to_lowercase().contains("subset")));
     }
 
     #[test]
     fn registry_path_rejects_type0_identity_h_to_visual() {
         let info = font_info(
-            "F2", "Type0", super::super::font_registry::EncodingKind::IdentityH,
-            false, true, false,
+            "F2",
+            "Type0",
+            super::super::font_registry::EncodingKind::IdentityH,
+            false,
+            true,
+            false,
         );
         let d = classify_text_edit_strategy(Some("F2"), &[info], "Hello");
-        assert!(matches!(d.strategy, TextEditStrategy::SafeVisualReplacement));
-        assert!(d.reasons.iter().any(|r| r.to_lowercase().contains("identity-h")));
+        assert!(matches!(
+            d.strategy,
+            TextEditStrategy::SafeVisualReplacement
+        ));
+        assert!(d
+            .reasons
+            .iter()
+            .any(|r| r.to_lowercase().contains("identity-h")));
     }
 
     #[test]
     fn registry_path_marks_type3_read_only() {
         let info = font_info(
-            "F3", "Type3", super::super::font_registry::EncodingKind::Unknown,
-            false, false, true,
+            "F3",
+            "Type3",
+            super::super::font_registry::EncodingKind::Unknown,
+            false,
+            false,
+            true,
         );
         let d = classify_text_edit_strategy(Some("F3"), &[info], "Hello");
         assert!(matches!(d.strategy, TextEditStrategy::ReadOnly));
@@ -1435,34 +1596,58 @@ mod tests {
     #[test]
     fn registry_path_rejects_cjk_to_visual() {
         let info = font_info(
-            "F1", "Type1", super::super::font_registry::EncodingKind::WinAnsi,
-            false, false, false,
+            "F1",
+            "Type1",
+            super::super::font_registry::EncodingKind::WinAnsi,
+            false,
+            false,
+            false,
         );
         let d = classify_text_edit_strategy(Some("F1"), &[info], "日本");
-        assert!(matches!(d.strategy, TextEditStrategy::SafeVisualReplacement));
+        assert!(matches!(
+            d.strategy,
+            TextEditStrategy::SafeVisualReplacement
+        ));
         assert!(d.reasons.iter().any(|r| r.to_lowercase().contains("cjk")));
     }
 
     #[test]
     fn registry_path_rejects_arabic_to_visual() {
         let info = font_info(
-            "F1", "Type1", super::super::font_registry::EncodingKind::WinAnsi,
-            false, false, false,
+            "F1",
+            "Type1",
+            super::super::font_registry::EncodingKind::WinAnsi,
+            false,
+            false,
+            false,
         );
         let d = classify_text_edit_strategy(Some("F1"), &[info], "مرحبا");
-        assert!(matches!(d.strategy, TextEditStrategy::SafeVisualReplacement));
-        assert!(d.reasons.iter().any(|r| r.to_lowercase().contains("arabic")));
+        assert!(matches!(
+            d.strategy,
+            TextEditStrategy::SafeVisualReplacement
+        ));
+        assert!(d
+            .reasons
+            .iter()
+            .any(|r| r.to_lowercase().contains("arabic")));
     }
 
     #[test]
     fn registry_path_outside_latin1_falls_back() {
         let info = font_info(
-            "F1", "Type1", super::super::font_registry::EncodingKind::WinAnsi,
-            false, false, false,
+            "F1",
+            "Type1",
+            super::super::font_registry::EncodingKind::WinAnsi,
+            false,
+            false,
+            false,
         );
         // U+0394 (GREEK CAPITAL LETTER DELTA) — outside Latin-1.
         let d = classify_text_edit_strategy(Some("F1"), &[info], "Δ");
-        assert!(matches!(d.strategy, TextEditStrategy::SafeVisualReplacement));
+        assert!(matches!(
+            d.strategy,
+            TextEditStrategy::SafeVisualReplacement
+        ));
     }
 
     #[test]
@@ -1470,15 +1655,24 @@ mod tests {
         // Empty registry, ASCII replacement is not enough for a native
         // claim in Phase 34: font/encoding/operator identity must be known.
         let d = classify_text_edit_strategy(Some("F99"), &[], "Hello");
-        assert!(matches!(d.strategy, TextEditStrategy::SafeVisualReplacement));
+        assert!(matches!(
+            d.strategy,
+            TextEditStrategy::SafeVisualReplacement
+        ));
         assert_eq!(d.source, "fallback_heuristic");
-        assert!(d.reasons.iter().any(|r| r.contains("native edit cannot be verified")));
+        assert!(d
+            .reasons
+            .iter()
+            .any(|r| r.contains("native edit cannot be verified")));
     }
 
     #[test]
     fn missing_font_in_registry_non_ascii_falls_back_to_visual() {
         let d = classify_text_edit_strategy(Some("F99"), &[], "café");
-        assert!(matches!(d.strategy, TextEditStrategy::SafeVisualReplacement));
+        assert!(matches!(
+            d.strategy,
+            TextEditStrategy::SafeVisualReplacement
+        ));
         assert_eq!(d.source, "fallback_heuristic");
     }
 
@@ -1506,46 +1700,100 @@ mod tests {
     #[test]
     fn experimental_tounicode_flag_off_does_not_surface_path() {
         let info = super::super::font_registry::classify_font_info_from_parts(
-            "F0", "STHeiti", "Type0", super::super::font_registry::EncodingKind::IdentityH,
-            Some("Identity-H".into()), 0, true, false, true,
+            "F0",
+            "STHeiti",
+            "Type0",
+            super::super::font_registry::EncodingKind::IdentityH,
+            Some("Identity-H".into()),
+            0,
+            true,
+            false,
+            true,
         );
         let d = classify_text_edit_strategy_with_options(
-            Some("F0"), &[info], "Hello",
-            ClassifyOptions { enable_experimental_to_unicode: false, experimental_to_unicode_ready: true },
+            Some("F0"),
+            &[info],
+            "Hello",
+            ClassifyOptions {
+                enable_experimental_to_unicode: false,
+                experimental_to_unicode_ready: true,
+            },
         );
-        assert!(matches!(d.strategy, TextEditStrategy::SafeVisualReplacement));
-        assert!(!d.warnings.iter().any(|w| w.to_lowercase().contains("experimental")));
+        assert!(matches!(
+            d.strategy,
+            TextEditStrategy::SafeVisualReplacement
+        ));
+        assert!(!d
+            .warnings
+            .iter()
+            .any(|w| w.to_lowercase().contains("experimental")));
     }
 
     #[test]
     fn experimental_tounicode_flag_on_and_ready_surfaces_path_without_claim() {
         let info = super::super::font_registry::classify_font_info_from_parts(
-            "F0", "STHeiti", "Type0", super::super::font_registry::EncodingKind::IdentityH,
-            Some("Identity-H".into()), 0, true, false, true,
+            "F0",
+            "STHeiti",
+            "Type0",
+            super::super::font_registry::EncodingKind::IdentityH,
+            Some("Identity-H".into()),
+            0,
+            true,
+            false,
+            true,
         );
         let d = classify_text_edit_strategy_with_options(
-            Some("F0"), &[info], "Hello",
-            ClassifyOptions { enable_experimental_to_unicode: true, experimental_to_unicode_ready: true },
+            Some("F0"),
+            &[info],
+            "Hello",
+            ClassifyOptions {
+                enable_experimental_to_unicode: true,
+                experimental_to_unicode_ready: true,
+            },
         );
         // Strategy remains visual replacement (write path is NOT
         // implemented) — but the experimental warning is now visible
         // so the UI knows the user enabled the flag.
-        assert!(matches!(d.strategy, TextEditStrategy::SafeVisualReplacement));
-        assert!(d.warnings.iter().any(|w| w.to_lowercase().contains("experimental")));
+        assert!(matches!(
+            d.strategy,
+            TextEditStrategy::SafeVisualReplacement
+        ));
+        assert!(d
+            .warnings
+            .iter()
+            .any(|w| w.to_lowercase().contains("experimental")));
     }
 
     #[test]
     fn experimental_tounicode_flag_on_but_not_ready_surfaces_ambiguous_diag() {
         let info = super::super::font_registry::classify_font_info_from_parts(
-            "F0", "STHeiti", "Type0", super::super::font_registry::EncodingKind::IdentityH,
-            Some("Identity-H".into()), 0, true, false, true,
+            "F0",
+            "STHeiti",
+            "Type0",
+            super::super::font_registry::EncodingKind::IdentityH,
+            Some("Identity-H".into()),
+            0,
+            true,
+            false,
+            true,
         );
         let d = classify_text_edit_strategy_with_options(
-            Some("F0"), &[info], "Hello",
-            ClassifyOptions { enable_experimental_to_unicode: true, experimental_to_unicode_ready: false },
+            Some("F0"),
+            &[info],
+            "Hello",
+            ClassifyOptions {
+                enable_experimental_to_unicode: true,
+                experimental_to_unicode_ready: false,
+            },
         );
-        assert!(matches!(d.strategy, TextEditStrategy::SafeVisualReplacement));
-        assert!(d.warnings.iter().any(|w| w.to_lowercase().contains("ambiguous")));
+        assert!(matches!(
+            d.strategy,
+            TextEditStrategy::SafeVisualReplacement
+        ));
+        assert!(d
+            .warnings
+            .iter()
+            .any(|w| w.to_lowercase().contains("ambiguous")));
     }
 
     // ─── Phase 30D: verification helper ─────────────────────────────
@@ -1554,7 +1802,11 @@ mod tests {
     fn verify_text_present_in_page_returns_true_for_existing_text() {
         // Build a minimal PDF with one page containing "Hello".
         let mut src = mupdf::pdf::PdfDocument::new();
-        src.new_page(mupdf::Size { width: 612.0, height: 792.0 }).unwrap();
+        src.new_page(mupdf::Size {
+            width: 612.0,
+            height: 792.0,
+        })
+        .unwrap();
         let mut bytes: Vec<u8> = Vec::new();
         src.write_to(&mut bytes).unwrap();
         // Empty PDF — needle "" trivially passes.
@@ -1565,7 +1817,11 @@ mod tests {
     #[test]
     fn verify_text_present_in_page_returns_false_when_text_missing() {
         let mut src = mupdf::pdf::PdfDocument::new();
-        src.new_page(mupdf::Size { width: 612.0, height: 792.0 }).unwrap();
+        src.new_page(mupdf::Size {
+            width: 612.0,
+            height: 792.0,
+        })
+        .unwrap();
         let mut bytes: Vec<u8> = Vec::new();
         src.write_to(&mut bytes).unwrap();
         // Empty page does not contain "Hello".
@@ -1586,7 +1842,8 @@ mod tests {
         };
         let stream: &[u8] = b"BT /F1 12 Tf 72 700 Td (Hello) Tj ET";
         let ops = find_text_operations(stream);
-        let same = replace_text_in_stream_encoded(stream, &ops[0], "Hello", EncodingTarget::WinAnsi);
+        let same =
+            replace_text_in_stream_encoded(stream, &ops[0], "Hello", EncodingTarget::WinAnsi);
         // The rewriter normalises (...) Tj, so bytes are byte-identical
         // for an unchanged ASCII operand.
         assert_eq!(same, stream);
@@ -1594,8 +1851,7 @@ mod tests {
 
     #[test]
     fn safe_visual_cover_rect_uses_pdf_y_coordinates_with_padding() {
-        let cover = safe_visual_cover_rect([72.0, 700.0, 170.0, 720.0], 12.0)
-            .expect("valid cover");
+        let cover = safe_visual_cover_rect([72.0, 700.0, 170.0, 720.0], 12.0).expect("valid cover");
 
         assert!((cover[0] - 70.2).abs() < 0.001);
         assert!((cover[1] - 698.2).abs() < 0.001);
@@ -1614,13 +1870,20 @@ mod tests {
 
         let cover_pos = ops.find("70 698 102 24 re").expect("cover rectangle op");
         let text_pos = ops.find("(New text) Tj").expect("replacement text op");
-        assert!(cover_pos < text_pos, "cover must be painted before replacement text");
+        assert!(
+            cover_pos < text_pos,
+            "cover must be painted before replacement text"
+        );
     }
 
     #[test]
     fn appending_safe_visual_ops_converts_existing_stream_to_contents_array() {
         let mut pdf = mupdf::pdf::PdfDocument::new();
-        pdf.new_page(mupdf::Size { width: 612.0, height: 792.0 }).unwrap();
+        pdf.new_page(mupdf::Size {
+            width: 612.0,
+            height: 792.0,
+        })
+        .unwrap();
 
         let mut page = pdf.find_page(0).unwrap();
         let first_stream_dict = pdf.new_dict().unwrap();
@@ -1633,7 +1896,10 @@ mod tests {
 
         let page = pdf.find_page(0).unwrap();
         let contents = page.get_dict("Contents").unwrap().expect("contents");
-        assert!(contents.is_array().unwrap_or(false), "contents must become an array");
+        assert!(
+            contents.is_array().unwrap_or(false),
+            "contents must become an array"
+        );
         assert_eq!(contents.len().unwrap(), 2);
         let appended = contents.get_array(1).unwrap().expect("appended stream");
         let appended_bytes = appended.read_stream().unwrap();
@@ -1644,7 +1910,11 @@ mod tests {
     #[test]
     fn appending_safe_visual_ops_preserves_contents_array_and_appends_last() {
         let mut pdf = mupdf::pdf::PdfDocument::new();
-        pdf.new_page(mupdf::Size { width: 612.0, height: 792.0 }).unwrap();
+        pdf.new_page(mupdf::Size {
+            width: 612.0,
+            height: 792.0,
+        })
+        .unwrap();
 
         let mut page = pdf.find_page(0).unwrap();
         let mut arr = pdf.new_array().unwrap();
@@ -1674,6 +1944,9 @@ mod tests {
         let err = append_safe_visual_ops_to_page_contents(&mut pdf, 0, "q\nQ\n")
             .expect_err("missing page must reject safe visual append");
 
-        assert!(err.contains("find_page"), "clear append failure, got: {err}");
+        assert!(
+            err.contains("find_page"),
+            "clear append failure, got: {err}"
+        );
     }
 }

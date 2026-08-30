@@ -63,7 +63,8 @@ pub fn strategy() -> TestCorpusStrategyResponse {
 
     let governance_rules = vec![
         "Use synthetic or rights-cleared documents only for distribution.".to_string(),
-        "Keep sensitive corpora encrypted at rest and excluded from telemetry payloads.".to_string(),
+        "Keep sensitive corpora encrypted at rest and excluded from telemetry payloads."
+            .to_string(),
         "Track checksum/version for every benchmark corpus artifact.".to_string(),
         "Run full regression suite before release candidate promotion.".to_string(),
     ];

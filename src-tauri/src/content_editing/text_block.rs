@@ -20,7 +20,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use mupdf::Buffer;
 
 use super::analysis::extract_page_content_objects;
-use super::stream_parser::{find_text_operations, replace_text_in_stream_encoded, text_matches, EncodingTarget};
+use super::stream_parser::{
+    find_text_operations, replace_text_in_stream_encoded, text_matches, EncodingTarget,
+};
 use super::text_edit::classify_font_replacement_safety;
 use super::types::*;
 use crate::document_core::DocumentCoreState;
@@ -40,9 +42,14 @@ pub fn group_text_blocks(objects: &[ContentObject]) -> Vec<TextBlock> {
         .collect();
     // Sort by y descending (top → bottom), then x ascending.
     spans.sort_by(|a, b| {
-        b.bbox[3].partial_cmp(&a.bbox[3])
+        b.bbox[3]
+            .partial_cmp(&a.bbox[3])
             .unwrap_or(std::cmp::Ordering::Equal)
-            .then(a.bbox[0].partial_cmp(&b.bbox[0]).unwrap_or(std::cmp::Ordering::Equal))
+            .then(
+                a.bbox[0]
+                    .partial_cmp(&b.bbox[0])
+                    .unwrap_or(std::cmp::Ordering::Equal),
+            )
     });
 
     let mut blocks: Vec<Vec<&ContentObject>> = Vec::new();
@@ -147,13 +154,21 @@ pub fn apply_text_block_edit(
     let block = blocks
         .iter()
         .find(|b| b.block_id == request.block_id)
-        .ok_or_else(|| format!("Block {} not found on page {}", request.block_id, request.page_index + 1))?;
+        .ok_or_else(|| {
+            format!(
+                "Block {} not found on page {}",
+                request.block_id,
+                request.page_index + 1
+            )
+        })?;
 
     let before_text = block.combined_text.clone();
 
     let strategy = match &request.strategy {
         BlockEditStrategy::Auto => {
-            if block.all_native_editable && lines_match_count(&before_text, &request.replacement_text) {
+            if block.all_native_editable
+                && lines_match_count(&before_text, &request.replacement_text)
+            {
                 BlockEditStrategy::NativeMultiOperator
             } else {
                 BlockEditStrategy::VisualReflow
@@ -186,21 +201,29 @@ fn apply_native_multi_operator(
     before_text: &str,
     objects: &[ContentObject],
 ) -> Result<TextBlockEditResult, String> {
-    let arc = doc_state.store.get_session_arc_pub(&request.session_id)
+    let arc = doc_state
+        .store
+        .get_session_arc_pub(&request.session_id)
         .map_err(|e| e.to_string())?;
     let session_bytes = {
-        let s = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+        let s = arc
+            .lock()
+            .map_err(|_| "session lock poisoned".to_string())?;
         s.document.bytes.clone()
     };
 
     let pdf = mupdf::pdf::PdfDocument::from_bytes(&session_bytes)
         .map_err(|e| format!("Failed to open PDF: {e}"))?;
-    let page_no = i32::try_from(request.page_index)
-        .map_err(|e| format!("page index: {e}"))?;
-    let fz_page = pdf.load_page(page_no).map_err(|e| format!("load_page: {e}"))?;
+    let page_no = i32::try_from(request.page_index).map_err(|e| format!("page index: {e}"))?;
+    let fz_page = pdf
+        .load_page(page_no)
+        .map_err(|e| format!("load_page: {e}"))?;
     let pdf_page = mupdf::pdf::PdfPage::try_from(fz_page).map_err(|e| format!("PdfPage: {e}"))?;
     let page_obj = pdf_page.object();
-    let contents = page_obj.get_dict("Contents").ok().flatten()
+    let contents = page_obj
+        .get_dict("Contents")
+        .ok()
+        .flatten()
         .ok_or_else(|| "Page has no /Contents".to_string())?;
 
     // Only support single-stream pages for multi-operator native edit
@@ -223,7 +246,8 @@ fn apply_native_multi_operator(
         });
     }
 
-    let mut stream_bytes = contents.read_stream()
+    let mut stream_bytes = contents
+        .read_stream()
         .map_err(|e| format!("read_stream: {e}"))?;
 
     let new_lines: Vec<&str> = request.replacement_text.lines().collect();
@@ -283,7 +307,8 @@ fn apply_native_multi_operator(
         }
 
         let ops = find_text_operations(&stream_bytes);
-        let matches: Vec<&super::stream_parser::TextOperation> = ops.iter()
+        let matches: Vec<&super::stream_parser::TextOperation> = ops
+            .iter()
             .filter(|op| text_matches(op, &original_line))
             .collect();
         let chosen = if matches.is_empty() {
@@ -341,11 +366,13 @@ fn apply_native_multi_operator(
 
     let buf = Buffer::from_bytes(&stream_bytes).map_err(|e| format!("Buffer: {e}"))?;
     let mut contents_mut = contents;
-    contents_mut.write_stream_buffer(&buf)
+    contents_mut
+        .write_stream_buffer(&buf)
         .map_err(|e| format!("write_stream_buffer: {e}"))?;
 
     let mut new_bytes: Vec<u8> = Vec::new();
-    pdf.write_to(&mut new_bytes).map_err(|e| format!("serialize: {e}"))?;
+    pdf.write_to(&mut new_bytes)
+        .map_err(|e| format!("serialize: {e}"))?;
     if new_bytes == session_bytes {
         return Ok(TextBlockEditResult {
             edit_id: edit_id.to_string(),
@@ -357,10 +384,15 @@ fn apply_native_multi_operator(
             before_text: before_text.to_string(),
             after_text: request.replacement_text.clone(),
             success: false,
-            warnings: vec!["Native block edit serialized identical bytes; refusing to claim success.".to_string()],
+            warnings: vec![
+                "Native block edit serialized identical bytes; refusing to claim success."
+                    .to_string(),
+            ],
         });
     }
-    let mut session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+    let mut session = arc
+        .lock()
+        .map_err(|_| "session lock poisoned".to_string())?;
     session.document.bytes = new_bytes;
     session.is_dirty = true;
     session.invalidate_cached_document();
@@ -433,15 +465,21 @@ fn apply_visual_reflow(
         }
     };
 
-    let arc = doc_state.store.get_session_arc_pub(&request.session_id)
+    let arc = doc_state
+        .store
+        .get_session_arc_pub(&request.session_id)
         .map_err(|e| e.to_string())?;
-    let mut session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+    let mut session = arc
+        .lock()
+        .map_err(|_| "session lock poisoned".to_string())?;
     let mut pdf = mupdf::pdf::PdfDocument::from_bytes(&session.document.bytes)
         .map_err(|e| format!("Failed to open PDF for editing: {e}"))?;
-    let page_no = i32::try_from(request.page_index)
-        .map_err(|e| format!("page index: {e}"))?;
-    let fz_page = pdf.load_page(page_no).map_err(|e| format!("load_page: {e}"))?;
-    let mut pdf_page = mupdf::pdf::PdfPage::try_from(fz_page).map_err(|e| format!("PdfPage: {e}"))?;
+    let page_no = i32::try_from(request.page_index).map_err(|e| format!("page index: {e}"))?;
+    let fz_page = pdf
+        .load_page(page_no)
+        .map_err(|e| format!("load_page: {e}"))?;
+    let mut pdf_page =
+        mupdf::pdf::PdfPage::try_from(fz_page).map_err(|e| format!("PdfPage: {e}"))?;
     let bg_sample = super::background_sampling::sample_page_background(
         doc_state,
         &request.session_id,
@@ -461,14 +499,16 @@ fn apply_visual_reflow(
     // 1) Mark the padded block bbox for redaction (defense in depth — the
     //    explicit cover rectangle drawn below is the load-bearing mechanism).
     let rect = mupdf::Rect::new(cover_rect[0], cover_rect[1], cover_rect[2], cover_rect[3]);
-    let mut annot = pdf_page.create_annotation(mupdf::pdf::PdfAnnotationType::Redact)
+    let mut annot = pdf_page
+        .create_annotation(mupdf::pdf::PdfAnnotationType::Redact)
         .map_err(|e| format!("create redact: {e}"))?;
     annot.set_rect(rect).map_err(|e| format!("set_rect: {e}"))?;
-    annot.set_color(mupdf::color::AnnotationColor::Rgb {
-        red: layout.cover_rgb[0],
-        green: layout.cover_rgb[1],
-        blue: layout.cover_rgb[2],
-    })
+    annot
+        .set_color(mupdf::color::AnnotationColor::Rgb {
+            red: layout.cover_rgb[0],
+            green: layout.cover_rgb[1],
+            blue: layout.cover_rgb[2],
+        })
         .map_err(|e| format!("set_color: {e}"))?;
     drop(annot);
     pdf_page.redact().map_err(|e| format!("redact: {e}"))?;
@@ -489,7 +529,9 @@ fn apply_visual_reflow(
     let mut text_block = String::new();
     text_block.push_str(&format!(
         "\nq\n{} {} {} rg\n{cx0} {cy0} {cw} {ch} re\nf\nQ\n",
-        fmt_color(layout.cover_rgb[0]), fmt_color(layout.cover_rgb[1]), fmt_color(layout.cover_rgb[2]),
+        fmt_color(layout.cover_rgb[0]),
+        fmt_color(layout.cover_rgb[1]),
+        fmt_color(layout.cover_rgb[2]),
     ));
     text_block.push_str("q\nBT\n");
     text_block.push_str(&format!("/R2HHelv {} Tf\n", layout.font_size));
@@ -505,7 +547,8 @@ fn apply_visual_reflow(
     append_text_ops_to_page_contents(&mut pdf, request.page_index, &text_block)?;
 
     let mut new_bytes: Vec<u8> = Vec::new();
-    pdf.write_to(&mut new_bytes).map_err(|e| format!("serialize: {e}"))?;
+    pdf.write_to(&mut new_bytes)
+        .map_err(|e| format!("serialize: {e}"))?;
     session.document.bytes = new_bytes;
     session.is_dirty = true;
     session.invalidate_cached_document();
@@ -567,7 +610,10 @@ fn compute_visual_reflow_layout(
                 if used_height > block_h {
                     return Err("Replacement text still does not fit after shrinking to the safe minimum font size.".to_string());
                 }
-                warnings.push(format!("Shrink-to-fit reduced visual reflow font size to {:.1} pt.", font_size));
+                warnings.push(format!(
+                    "Shrink-to-fit reduced visual reflow font size to {:.1} pt.",
+                    font_size
+                ));
             }
             BlockOverflowPolicy::AllowOverflow => {
                 warnings.push("Replacement text exceeds the original block height; visual overflow was explicitly allowed.".to_string());
@@ -589,26 +635,45 @@ fn append_text_ops_to_page_contents(
     page_index: usize,
     ops: &str,
 ) -> Result<(), String> {
-    let stream_dict = pdf.new_dict().map_err(|e| format!("new text stream dict: {e}"))?;
-    let mut new_stream = pdf.add_object(&stream_dict).map_err(|e| format!("add text stream: {e}"))?;
-    new_stream.write_stream_string(ops)
+    let stream_dict = pdf
+        .new_dict()
+        .map_err(|e| format!("new text stream dict: {e}"))?;
+    let mut new_stream = pdf
+        .add_object(&stream_dict)
+        .map_err(|e| format!("add text stream: {e}"))?;
+    new_stream
+        .write_stream_string(ops)
         .map_err(|e| format!("write text stream: {e}"))?;
 
     let page_no = i32::try_from(page_index).map_err(|e| format!("page index: {e}"))?;
-    let mut page_dict = pdf.find_page(page_no).map_err(|e| format!("find_page text append: {e}"))?;
-    match page_dict.get_dict("Contents").map_err(|e| format!("get Contents text append: {e}"))? {
+    let mut page_dict = pdf
+        .find_page(page_no)
+        .map_err(|e| format!("find_page text append: {e}"))?;
+    match page_dict
+        .get_dict("Contents")
+        .map_err(|e| format!("get Contents text append: {e}"))?
+    {
         Some(contents) if contents.is_array().unwrap_or(false) => {
             let mut arr = contents;
-            arr.array_push(new_stream).map_err(|e| format!("array_push text stream: {e}"))?;
+            arr.array_push(new_stream)
+                .map_err(|e| format!("array_push text stream: {e}"))?;
         }
         Some(contents) => {
-            let mut arr = pdf.new_array().map_err(|e| format!("new Contents array: {e}"))?;
-            arr.array_push(contents).map_err(|e| format!("array_push existing Contents: {e}"))?;
-            arr.array_push(new_stream).map_err(|e| format!("array_push text stream: {e}"))?;
-            page_dict.dict_put("Contents", arr).map_err(|e| format!("dict_put Contents array: {e}"))?;
+            let mut arr = pdf
+                .new_array()
+                .map_err(|e| format!("new Contents array: {e}"))?;
+            arr.array_push(contents)
+                .map_err(|e| format!("array_push existing Contents: {e}"))?;
+            arr.array_push(new_stream)
+                .map_err(|e| format!("array_push text stream: {e}"))?;
+            page_dict
+                .dict_put("Contents", arr)
+                .map_err(|e| format!("dict_put Contents array: {e}"))?;
         }
         None => {
-            page_dict.dict_put("Contents", new_stream).map_err(|e| format!("dict_put text Contents: {e}"))?;
+            page_dict
+                .dict_put("Contents", new_stream)
+                .map_err(|e| format!("dict_put text Contents: {e}"))?;
         }
     }
     Ok(())
@@ -667,9 +732,13 @@ fn ensure_helvetica_resource(
             let helv = pdf.new_object_from_str(
                 "<</Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding>>",
             ).map_err(|e| format!("new_object_from_str: {e}"))?;
-            new_font_dict.dict_put("R2HHelv", helv).map_err(|e| format!("dict_put: {e}"))?;
+            new_font_dict
+                .dict_put("R2HHelv", helv)
+                .map_err(|e| format!("dict_put: {e}"))?;
             let mut resources_mut = resources;
-            resources_mut.dict_put("Font", new_font_dict).map_err(|e| format!("dict_put Font: {e}"))?;
+            resources_mut
+                .dict_put("Font", new_font_dict)
+                .map_err(|e| format!("dict_put Font: {e}"))?;
             return Ok(());
         }
         Err(e) => return Err(format!("get Font dict: {e}")),
@@ -677,16 +746,22 @@ fn ensure_helvetica_resource(
     if let Ok(Some(_)) = font_dict.get_dict("R2HHelv") {
         return Ok(());
     }
-    let helv = pdf.new_object_from_str(
-        "<</Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding>>",
-    ).map_err(|e| format!("new_object_from_str: {e}"))?;
+    let helv = pdf
+        .new_object_from_str(
+            "<</Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding>>",
+        )
+        .map_err(|e| format!("new_object_from_str: {e}"))?;
     let mut font_dict_mut = font_dict;
-    font_dict_mut.dict_put("R2HHelv", helv).map_err(|e| format!("dict_put R2HHelv: {e}"))?;
+    font_dict_mut
+        .dict_put("R2HHelv", helv)
+        .map_err(|e| format!("dict_put R2HHelv: {e}"))?;
     Ok(())
 }
 
 fn pdf_escape_string(s: &str) -> String {
-    s.replace('\\', "\\\\").replace('(', "\\(").replace(')', "\\)")
+    s.replace('\\', "\\\\")
+        .replace('(', "\\(")
+        .replace(')', "\\)")
 }
 
 fn fmt_color(v: f32) -> String {
@@ -696,7 +771,10 @@ fn fmt_color(v: f32) -> String {
 }
 
 fn epoch_ms() -> u128 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
 }
 
 #[cfg(test)]
@@ -704,7 +782,11 @@ mod tests {
     use super::*;
 
     fn span(
-        id: &str, text: &str, page: usize, size: f32, bbox: [f32; 4],
+        id: &str,
+        text: &str,
+        page: usize,
+        size: f32,
+        bbox: [f32; 4],
         level: EditableLevel,
     ) -> ContentObject {
         ContentObject {
@@ -746,9 +828,30 @@ mod tests {
     #[test]
     fn groups_three_consecutive_lines_into_one_block() {
         let objs = vec![
-            span("a", "Line 1", 0, 12.0, [10.0, 70.0, 110.0, 82.0], EditableLevel::NativeEditable),
-            span("b", "Line 2", 0, 12.0, [10.0, 56.0, 110.0, 68.0], EditableLevel::NativeEditable),
-            span("c", "Line 3", 0, 12.0, [10.0, 42.0, 110.0, 54.0], EditableLevel::NativeEditable),
+            span(
+                "a",
+                "Line 1",
+                0,
+                12.0,
+                [10.0, 70.0, 110.0, 82.0],
+                EditableLevel::NativeEditable,
+            ),
+            span(
+                "b",
+                "Line 2",
+                0,
+                12.0,
+                [10.0, 56.0, 110.0, 68.0],
+                EditableLevel::NativeEditable,
+            ),
+            span(
+                "c",
+                "Line 3",
+                0,
+                12.0,
+                [10.0, 42.0, 110.0, 54.0],
+                EditableLevel::NativeEditable,
+            ),
         ];
         let blocks = group_text_blocks(&objs);
         assert_eq!(blocks.len(), 1);
@@ -760,8 +863,22 @@ mod tests {
     #[test]
     fn far_apart_lines_get_separate_blocks() {
         let objs = vec![
-            span("a", "Para 1", 0, 12.0, [10.0, 700.0, 200.0, 712.0], EditableLevel::NativeEditable),
-            span("b", "Para 2", 0, 12.0, [10.0, 200.0, 200.0, 212.0], EditableLevel::NativeEditable),
+            span(
+                "a",
+                "Para 1",
+                0,
+                12.0,
+                [10.0, 700.0, 200.0, 712.0],
+                EditableLevel::NativeEditable,
+            ),
+            span(
+                "b",
+                "Para 2",
+                0,
+                12.0,
+                [10.0, 200.0, 200.0, 212.0],
+                EditableLevel::NativeEditable,
+            ),
         ];
         let blocks = group_text_blocks(&objs);
         assert_eq!(blocks.len(), 2);
@@ -770,8 +887,22 @@ mod tests {
     #[test]
     fn different_font_size_splits_block() {
         let objs = vec![
-            span("a", "Heading", 0, 18.0, [10.0, 690.0, 200.0, 710.0], EditableLevel::NativeEditable),
-            span("b", "Body text", 0, 10.0, [10.0, 670.0, 200.0, 682.0], EditableLevel::NativeEditable),
+            span(
+                "a",
+                "Heading",
+                0,
+                18.0,
+                [10.0, 690.0, 200.0, 710.0],
+                EditableLevel::NativeEditable,
+            ),
+            span(
+                "b",
+                "Body text",
+                0,
+                10.0,
+                [10.0, 670.0, 200.0, 682.0],
+                EditableLevel::NativeEditable,
+            ),
         ];
         let blocks = group_text_blocks(&objs);
         assert_eq!(blocks.len(), 2);
@@ -780,13 +911,30 @@ mod tests {
     #[test]
     fn visual_patch_member_marks_block_not_native() {
         let objs = vec![
-            span("a", "Hello", 0, 12.0, [10.0, 70.0, 110.0, 82.0], EditableLevel::NativeEditable),
-            span("b", "日本語", 0, 12.0, [10.0, 56.0, 110.0, 68.0], EditableLevel::VisualPatchOnly),
+            span(
+                "a",
+                "Hello",
+                0,
+                12.0,
+                [10.0, 70.0, 110.0, 82.0],
+                EditableLevel::NativeEditable,
+            ),
+            span(
+                "b",
+                "日本語",
+                0,
+                12.0,
+                [10.0, 56.0, 110.0, 68.0],
+                EditableLevel::VisualPatchOnly,
+            ),
         ];
         let blocks = group_text_blocks(&objs);
         assert_eq!(blocks.len(), 1);
         assert!(!blocks[0].all_native_editable);
-        assert!(blocks[0].diagnostics.iter().any(|d| d.to_lowercase().contains("visual reflow")));
+        assert!(blocks[0]
+            .diagnostics
+            .iter()
+            .any(|d| d.to_lowercase().contains("visual reflow")));
     }
 
     #[test]
@@ -824,7 +972,8 @@ mod tests {
             [0.0, 0.0, 60.0, 18.0],
             12.0,
             &BlockOverflowPolicy::ShrinkToFit,
-        ).unwrap();
+        )
+        .unwrap();
         assert!(layout.font_size < 12.0);
         assert!(layout.warnings.iter().any(|w| w.contains("Shrink-to-fit")));
     }
@@ -836,9 +985,13 @@ mod tests {
             [0.0, 0.0, 200.0, 40.0],
             12.0,
             &BlockOverflowPolicy::Reject,
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(layout.cover_rgb, [1.0, 1.0, 1.0]);
-        assert!(layout.warnings.iter().any(|w| w.contains("Visual paragraph reflow")));
+        assert!(layout
+            .warnings
+            .iter()
+            .any(|w| w.contains("Visual paragraph reflow")));
     }
 
     #[test]

@@ -12,7 +12,8 @@ pub fn performance_strategy() -> PerformanceEngineeringStrategyResponse {
             "Tile-based rendering with viewport-first prioritization".to_string(),
             "Predictive prefetch for next/previous pages".to_string(),
             "Multi-level cache (tile, page, decode) under memory policy".to_string(),
-            "Frame budget target for interaction path; drop detail before missing budget".to_string(),
+            "Frame budget target for interaction path; drop detail before missing budget"
+                .to_string(),
         ],
         ocr_pipeline: vec![
             "Batched OCR with bounded worker pool".to_string(),

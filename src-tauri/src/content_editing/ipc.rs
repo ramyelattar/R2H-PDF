@@ -1,19 +1,16 @@
 //! IPC commands for native PDF content editing.
 
-use tauri::State;
-use crate::document_core::DocumentCoreState;
-use super::types::*;
 use super::analysis::extract_page_content_objects;
-use super::text_edit::apply_native_text_edit;
+use super::find_replace::{apply_find_replace_item, preview_find_replace};
+use super::history::ContentEditHistoryState;
 use super::image_edit::{
-    replace_native_image,
-    delete_native_image,
-    move_native_image,
-    crop_native_image,
+    crop_native_image, delete_native_image, move_native_image, replace_native_image,
     rotate_native_image,
 };
-use super::history::ContentEditHistoryState;
-use super::find_replace::{preview_find_replace, apply_find_replace_item};
+use super::text_edit::apply_native_text_edit;
+use super::types::*;
+use crate::document_core::DocumentCoreState;
+use tauri::State;
 
 /// Get all content objects on a page (text spans, images, paths).
 #[tauri::command]
@@ -34,8 +31,13 @@ pub fn pdf_apply_native_text_edit(
 ) -> Result<NativeTextEditResult, String> {
     // Capture session bytes before edit for undo snapshot.
     let before_snapshot = {
-        let arc = doc_state.store.get_session_arc_pub(&request.session_id).map_err(|e| e.to_string())?;
-        let session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+        let arc = doc_state
+            .store
+            .get_session_arc_pub(&request.session_id)
+            .map_err(|e| e.to_string())?;
+        let session = arc
+            .lock()
+            .map_err(|_| "session lock poisoned".to_string())?;
         session.document.bytes.clone()
     };
 
@@ -74,8 +76,13 @@ pub fn pdf_replace_native_image(
     request: NativeImageReplaceRequest,
 ) -> Result<NativeImageEditResult, String> {
     let before_snapshot = {
-        let arc = doc_state.store.get_session_arc_pub(&request.session_id).map_err(|e| e.to_string())?;
-        let session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+        let arc = doc_state
+            .store
+            .get_session_arc_pub(&request.session_id)
+            .map_err(|e| e.to_string())?;
+        let session = arc
+            .lock()
+            .map_err(|_| "session lock poisoned".to_string())?;
         session.document.bytes.clone()
     };
 
@@ -113,8 +120,13 @@ pub fn pdf_delete_native_image(
     request: NativeImageDeleteRequest,
 ) -> Result<NativeImageEditResult, String> {
     let before_snapshot = {
-        let arc = doc_state.store.get_session_arc_pub(&request.session_id).map_err(|e| e.to_string())?;
-        let session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+        let arc = doc_state
+            .store
+            .get_session_arc_pub(&request.session_id)
+            .map_err(|e| e.to_string())?;
+        let session = arc
+            .lock()
+            .map_err(|_| "session lock poisoned".to_string())?;
         session.document.bytes.clone()
     };
 
@@ -152,8 +164,13 @@ pub fn pdf_move_native_image(
     request: NativeImageMoveRequest,
 ) -> Result<NativeImageEditResult, String> {
     let before_snapshot = {
-        let arc = doc_state.store.get_session_arc_pub(&request.session_id).map_err(|e| e.to_string())?;
-        let session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+        let arc = doc_state
+            .store
+            .get_session_arc_pub(&request.session_id)
+            .map_err(|e| e.to_string())?;
+        let session = arc
+            .lock()
+            .map_err(|_| "session lock poisoned".to_string())?;
         session.document.bytes.clone()
     };
 
@@ -203,12 +220,18 @@ pub fn pdf_apply_find_replace(
 
     for item in &request.matches {
         let before_snapshot = {
-            let arc = doc_state.store.get_session_arc_pub(&request.session_id).map_err(|e| e.to_string())?;
-            let session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+            let arc = doc_state
+                .store
+                .get_session_arc_pub(&request.session_id)
+                .map_err(|e| e.to_string())?;
+            let session = arc
+                .lock()
+                .map_err(|_| "session lock poisoned".to_string())?;
             session.document.bytes.clone()
         };
         let before_len = before_snapshot.len();
-        match apply_find_replace_item(&doc_state, &request.session_id, &request.replace_text, item) {
+        match apply_find_replace_item(&doc_state, &request.session_id, &request.replace_text, item)
+        {
             Ok(result) if result.success => {
                 applied_count += 1;
                 let record = ContentEditRecord {
@@ -251,13 +274,21 @@ pub fn pdf_apply_find_replace(
                     warning: Some(warning),
                 });
                 let after_len = {
-                    let arc = doc_state.store.get_session_arc_pub(&request.session_id).map_err(|e| e.to_string())?;
-                    let session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+                    let arc = doc_state
+                        .store
+                        .get_session_arc_pub(&request.session_id)
+                        .map_err(|e| e.to_string())?;
+                    let session = arc
+                        .lock()
+                        .map_err(|_| "session lock poisoned".to_string())?;
                     session.document.bytes.len()
                 };
                 if after_len != before_len {
                     failed_count += 1;
-                    warnings.push(format!("Find/replace item {} reported failure after byte mutation risk.", item.id));
+                    warnings.push(format!(
+                        "Find/replace item {} reported failure after byte mutation risk.",
+                        item.id
+                    ));
                 }
             }
             Err(e) => {
@@ -293,8 +324,13 @@ pub fn pdf_crop_native_image(
     request: NativeImageCropRequest,
 ) -> Result<NativeImageEditResult, String> {
     let before_snapshot = {
-        let arc = doc_state.store.get_session_arc_pub(&request.session_id).map_err(|e| e.to_string())?;
-        let session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+        let arc = doc_state
+            .store
+            .get_session_arc_pub(&request.session_id)
+            .map_err(|e| e.to_string())?;
+        let session = arc
+            .lock()
+            .map_err(|_| "session lock poisoned".to_string())?;
         session.document.bytes.clone()
     };
 
@@ -330,8 +366,13 @@ pub fn pdf_rotate_native_image(
     request: NativeImageRotateRequest,
 ) -> Result<NativeImageEditResult, String> {
     let before_snapshot = {
-        let arc = doc_state.store.get_session_arc_pub(&request.session_id).map_err(|e| e.to_string())?;
-        let session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+        let arc = doc_state
+            .store
+            .get_session_arc_pub(&request.session_id)
+            .map_err(|e| e.to_string())?;
+        let session = arc
+            .lock()
+            .map_err(|_| "session lock poisoned".to_string())?;
         session.document.bytes.clone()
     };
 
@@ -423,8 +464,13 @@ pub fn pdf_get_page_rotation(
     session_id: String,
     page_index: usize,
 ) -> Result<PageRotationInfo, String> {
-    let arc = doc_state.store.get_session_arc_pub(&session_id).map_err(|e| e.to_string())?;
-    let session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+    let arc = doc_state
+        .store
+        .get_session_arc_pub(&session_id)
+        .map_err(|e| e.to_string())?;
+    let session = arc
+        .lock()
+        .map_err(|_| "session lock poisoned".to_string())?;
     let pdf = mupdf::pdf::PdfDocument::from_bytes(&session.document.bytes)
         .map_err(|e| format!("Failed to open PDF: {e}"))?;
     let count = pdf.page_count().map_err(|e| format!("page_count: {e}"))?;
@@ -477,9 +523,13 @@ pub fn pdf_apply_text_block_edit(
 ) -> Result<super::types::TextBlockEditResult, String> {
     // Capture session bytes BEFORE the edit so revert can restore them.
     let before_snapshot = {
-        let arc = doc_state.store.get_session_arc_pub(&request.session_id)
+        let arc = doc_state
+            .store
+            .get_session_arc_pub(&request.session_id)
             .map_err(|e| e.to_string())?;
-        let session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+        let session = arc
+            .lock()
+            .map_err(|_| "session lock poisoned".to_string())?;
         session.document.bytes.clone()
     };
 
@@ -510,10 +560,14 @@ pub fn pdf_apply_text_block_edit(
 }
 
 fn truncate(s: &str, max: usize) -> String {
-    if s.chars().count() <= max { return s.to_string(); }
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
     let mut acc = String::with_capacity(max + 1);
     for (i, c) in s.chars().enumerate() {
-        if i >= max - 1 { break; }
+        if i >= max - 1 {
+            break;
+        }
         acc.push(c);
     }
     acc.push('…');
@@ -567,11 +621,16 @@ pub fn pdf_cover_path_object(
     let mut warnings: Vec<String> = Vec::new();
 
     // Locate the path object from the extracted content objects.
-    let objects = extract_page_content_objects(&doc_state, &request.session_id, request.page_index)?;
-    let Some(path_obj) = objects.into_iter().find(|o| o.id == request.content_object_id) else {
+    let objects =
+        extract_page_content_objects(&doc_state, &request.session_id, request.page_index)?;
+    let Some(path_obj) = objects
+        .into_iter()
+        .find(|o| o.id == request.content_object_id)
+    else {
         return Err(format!(
             "Path object {} not found on page {}",
-            request.content_object_id, request.page_index + 1
+            request.content_object_id,
+            request.page_index + 1
         ));
     };
     if !matches!(path_obj.object_type, super::types::ContentObjectType::Path) {

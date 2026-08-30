@@ -50,7 +50,10 @@ impl ToUnicodeSummary {
     pub fn reverse_lookup(&self, unicode: &str) -> Option<Vec<u32>> {
         let mut by_unicode: BTreeMap<String, Vec<u32>> = BTreeMap::new();
         for e in &self.entries {
-            by_unicode.entry(e.unicode.clone()).or_default().push(e.code);
+            by_unicode
+                .entry(e.unicode.clone())
+                .or_default()
+                .push(e.code);
         }
         let mut out: Vec<u32> = Vec::new();
         for ch in unicode.chars() {
@@ -129,11 +132,15 @@ fn parse_bfchar_body(body: &str, summary: &mut ToUnicodeSummary) {
         .filter(|s| !s.is_empty());
     while let (Some(code_tok), Some(uni_tok)) = (tokens.next(), tokens.next()) {
         let Some(code) = parse_pdf_hex_int(code_tok) else {
-            summary.parse_warnings.push(format!("bfchar: bad code token {code_tok}"));
+            summary
+                .parse_warnings
+                .push(format!("bfchar: bad code token {code_tok}"));
             continue;
         };
         let Some(unicode) = parse_pdf_hex_string(uni_tok) else {
-            summary.parse_warnings.push(format!("bfchar: bad unicode token {uni_tok}"));
+            summary
+                .parse_warnings
+                .push(format!("bfchar: bad unicode token {uni_tok}"));
             continue;
         };
         summary.entries.push(ToUnicodeEntry { code, unicode });
@@ -151,18 +158,24 @@ fn parse_bfrange_body(body: &str, summary: &mut ToUnicodeSummary) {
         .peekable();
     while let (Some(lo_tok), Some(hi_tok)) = (iter.next(), iter.next()) {
         let Some(lo) = parse_pdf_hex_int(lo_tok) else {
-            summary.parse_warnings.push(format!("bfrange: bad lo {lo_tok}"));
+            summary
+                .parse_warnings
+                .push(format!("bfrange: bad lo {lo_tok}"));
             continue;
         };
         let Some(hi) = parse_pdf_hex_int(hi_tok) else {
-            summary.parse_warnings.push(format!("bfrange: bad hi {hi_tok}"));
+            summary
+                .parse_warnings
+                .push(format!("bfrange: bad hi {hi_tok}"));
             continue;
         };
         if hi < lo {
             summary.parse_warnings.push("bfrange: hi < lo".to_string());
             continue;
         }
-        let Some(next) = iter.next() else { break; };
+        let Some(next) = iter.next() else {
+            break;
+        };
         if next.starts_with('[') {
             // Read explicit list until ']' (may include the bracket inline).
             let mut list_tokens: Vec<String> = Vec::new();
@@ -173,7 +186,7 @@ fn parse_bfrange_body(body: &str, summary: &mut ToUnicodeSummary) {
             }
             // collect until ']' encountered
             if !next.ends_with(']') {
-                while let Some(tok) = iter.next() {
+                for tok in iter.by_ref() {
                     if tok.ends_with(']') {
                         first = tok.trim_end_matches(']').to_string();
                         if !first.is_empty() {
@@ -186,21 +199,27 @@ fn parse_bfrange_body(body: &str, summary: &mut ToUnicodeSummary) {
             }
             for (i, t) in list_tokens.iter().enumerate() {
                 let code = lo + i as u32;
-                if code > hi { break; }
+                if code > hi {
+                    break;
+                }
                 if let Some(unicode) = parse_pdf_hex_string(t) {
                     summary.entries.push(ToUnicodeEntry { code, unicode });
                 } else {
-                    summary.parse_warnings.push(format!("bfrange list: bad token {t}"));
+                    summary
+                        .parse_warnings
+                        .push(format!("bfrange list: bad token {t}"));
                 }
             }
         } else {
             // Contiguous range: starting unicode codepoint.
             let Some(start) = parse_pdf_hex_string_as_codepoint(next) else {
-                summary.parse_warnings.push(format!("bfrange: bad start {next}"));
+                summary
+                    .parse_warnings
+                    .push(format!("bfrange: bad start {next}"));
                 continue;
             };
             for code in lo..=hi {
-                let offset = (code - lo) as u32;
+                let offset = code - lo;
                 let cp = start + offset;
                 if let Some(ch) = char::from_u32(cp) {
                     summary.entries.push(ToUnicodeEntry {
@@ -208,7 +227,9 @@ fn parse_bfrange_body(body: &str, summary: &mut ToUnicodeSummary) {
                         unicode: ch.to_string(),
                     });
                 } else {
-                    summary.parse_warnings.push(format!("bfrange: invalid codepoint {cp:#X}"));
+                    summary
+                        .parse_warnings
+                        .push(format!("bfrange: invalid codepoint {cp:#X}"));
                 }
             }
         }
@@ -218,14 +239,18 @@ fn parse_bfrange_body(body: &str, summary: &mut ToUnicodeSummary) {
 /// Parse `<HHHH>` (PDF hex int) into u32. Accepts arbitrary hex length.
 fn parse_pdf_hex_int(tok: &str) -> Option<u32> {
     let trimmed = tok.trim_matches(|c: char| c == '<' || c == '>');
-    if trimmed.is_empty() { return None; }
+    if trimmed.is_empty() {
+        return None;
+    }
     u32::from_str_radix(trimmed, 16).ok()
 }
 
 /// Parse `<HHHHHHHH>` (PDF hex string) into a UTF-16BE string.
 fn parse_pdf_hex_string(tok: &str) -> Option<String> {
     let trimmed = tok.trim_matches(|c: char| c == '<' || c == '>');
-    if trimmed.is_empty() { return None; }
+    if trimmed.is_empty() {
+        return None;
+    }
     // Each pair of hex digits is one byte. UTF-16BE.
     let bytes: Vec<u8> = (0..trimmed.len())
         .step_by(2)
@@ -234,10 +259,12 @@ fn parse_pdf_hex_string(tok: &str) -> Option<String> {
             u8::from_str_radix(&trimmed[i..end], 16).ok()
         })
         .collect();
-    if bytes.len() % 2 != 0 || bytes.is_empty() {
+    if !bytes.len().is_multiple_of(2) || bytes.is_empty() {
         // 8-bit single-byte mapping — interpret as Latin-1.
         let chars: String = bytes.iter().map(|&b| b as char).collect();
-        if chars.is_empty() { return None; }
+        if chars.is_empty() {
+            return None;
+        }
         return Some(chars);
     }
     let u16s: Vec<u16> = bytes
@@ -249,7 +276,9 @@ fn parse_pdf_hex_string(tok: &str) -> Option<String> {
 
 fn parse_pdf_hex_string_as_codepoint(tok: &str) -> Option<u32> {
     let trimmed = tok.trim_matches(|c: char| c == '<' || c == '>');
-    if trimmed.is_empty() { return None; }
+    if trimmed.is_empty() {
+        return None;
+    }
     u32::from_str_radix(trimmed, 16).ok()
 }
 
@@ -276,8 +305,13 @@ pub fn parse_differences_tokens(tokens: &[String]) -> Vec<DifferencesEntry> {
             continue;
         }
         let name = t.trim_start_matches('/').to_string();
-        if name.is_empty() { continue; }
-        out.push(DifferencesEntry { code, glyph_name: name });
+        if name.is_empty() {
+            continue;
+        }
+        out.push(DifferencesEntry {
+            code,
+            glyph_name: name,
+        });
         code = code.saturating_add(1);
     }
     out
@@ -299,7 +333,13 @@ endbfchar
         let s = parse_to_unicode_cmap(stream);
         assert_eq!(s.bfchar_count, 1);
         assert_eq!(s.entries.len(), 3);
-        assert_eq!(s.entries[0], ToUnicodeEntry { code: 0x41, unicode: "A".to_string() });
+        assert_eq!(
+            s.entries[0],
+            ToUnicodeEntry {
+                code: 0x41,
+                unicode: "A".to_string()
+            }
+        );
         assert!(s.parse_warnings.is_empty());
     }
 
@@ -327,8 +367,20 @@ endbfrange
 ";
         let s = parse_to_unicode_cmap(stream);
         assert_eq!(s.entries.len(), 3);
-        assert_eq!(s.entries[0], ToUnicodeEntry { code: 0x61, unicode: "A".to_string() });
-        assert_eq!(s.entries[2], ToUnicodeEntry { code: 0x63, unicode: "C".to_string() });
+        assert_eq!(
+            s.entries[0],
+            ToUnicodeEntry {
+                code: 0x61,
+                unicode: "A".to_string()
+            }
+        );
+        assert_eq!(
+            s.entries[2],
+            ToUnicodeEntry {
+                code: 0x63,
+                unicode: "C".to_string()
+            }
+        );
     }
 
     #[test]
@@ -395,10 +447,34 @@ endbfchar
         ];
         let out = parse_differences_tokens(&toks);
         assert_eq!(out.len(), 4);
-        assert_eq!(out[0], DifferencesEntry { code: 32, glyph_name: "space".to_string() });
-        assert_eq!(out[1], DifferencesEntry { code: 65, glyph_name: "A".to_string() });
-        assert_eq!(out[2], DifferencesEntry { code: 66, glyph_name: "B".to_string() });
-        assert_eq!(out[3], DifferencesEntry { code: 67, glyph_name: "C".to_string() });
+        assert_eq!(
+            out[0],
+            DifferencesEntry {
+                code: 32,
+                glyph_name: "space".to_string()
+            }
+        );
+        assert_eq!(
+            out[1],
+            DifferencesEntry {
+                code: 65,
+                glyph_name: "A".to_string()
+            }
+        );
+        assert_eq!(
+            out[2],
+            DifferencesEntry {
+                code: 66,
+                glyph_name: "B".to_string()
+            }
+        );
+        assert_eq!(
+            out[3],
+            DifferencesEntry {
+                code: 67,
+                glyph_name: "C".to_string()
+            }
+        );
     }
 
     #[test]

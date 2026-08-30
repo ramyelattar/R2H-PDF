@@ -1,7 +1,7 @@
 //! Rendered-pixel background sampling for safe visual text covers.
 
-use mupdf::{Colorspace, Matrix};
 use crate::document_core::DocumentCoreState;
+use mupdf::{Colorspace, Matrix};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BackgroundSample {
@@ -17,7 +17,9 @@ impl BackgroundSample {
             rgb: [1.0, 1.0, 1.0],
             confidence: 0.0,
             used_fallback: true,
-            warning: Some("Background could not be sampled reliably; white cover used.".to_string()),
+            warning: Some(
+                "Background could not be sampled reliably; white cover used.".to_string(),
+            ),
         }
     }
 }
@@ -145,7 +147,10 @@ fn dominant_rgb(samples: &[[u8; 3]]) -> Option<BackgroundSample> {
     bs.sort_unstable();
     let mid = samples.len() / 2;
     let med = [rs[mid], gs[mid], bs[mid]];
-    let close = samples.iter().filter(|p| color_distance_sq(**p, med) <= 18 * 18).count();
+    let close = samples
+        .iter()
+        .filter(|p| color_distance_sq(**p, med) <= 18 * 18)
+        .count();
     let confidence = close as f32 / samples.len() as f32;
     if confidence < 0.80 {
         return None;
@@ -184,7 +189,15 @@ mod tests {
     #[test]
     fn white_background_samples_white() {
         let pixels = solid(200, 200, [255, 255, 255]);
-        let sample = sample_background_from_rgba(&pixels, 200, 200, 100.0, 100.0, [40.0, 20.0, 60.0, 40.0], 2.0);
+        let sample = sample_background_from_rgba(
+            &pixels,
+            200,
+            200,
+            100.0,
+            100.0,
+            [40.0, 20.0, 60.0, 40.0],
+            2.0,
+        );
         assert!(!sample.used_fallback);
         assert!(sample.rgb.iter().all(|v| (*v - 1.0).abs() < 0.01));
     }
@@ -192,7 +205,15 @@ mod tests {
     #[test]
     fn gray_background_samples_gray() {
         let pixels = solid(200, 200, [188, 188, 188]);
-        let sample = sample_background_from_rgba(&pixels, 200, 200, 100.0, 100.0, [20.0, 20.0, 60.0, 40.0], 2.0);
+        let sample = sample_background_from_rgba(
+            &pixels,
+            200,
+            200,
+            100.0,
+            100.0,
+            [20.0, 20.0, 60.0, 40.0],
+            2.0,
+        );
         assert!(!sample.used_fallback);
         assert!((sample.rgb[0] - 188.0 / 255.0).abs() < 0.01);
     }
@@ -200,7 +221,15 @@ mod tests {
     #[test]
     fn colored_background_samples_color() {
         let pixels = solid(200, 200, [80, 150, 210]);
-        let sample = sample_background_from_rgba(&pixels, 200, 200, 100.0, 100.0, [20.0, 20.0, 60.0, 40.0], 2.0);
+        let sample = sample_background_from_rgba(
+            &pixels,
+            200,
+            200,
+            100.0,
+            100.0,
+            [20.0, 20.0, 60.0, 40.0],
+            2.0,
+        );
         assert!(!sample.used_fallback);
         assert!((sample.rgb[2] - 210.0 / 255.0).abs() < 0.01);
     }
@@ -214,8 +243,19 @@ mod tests {
                 pixels.extend_from_slice(&[rgb[0], rgb[1], rgb[2], 255]);
             }
         }
-        let sample = sample_background_from_rgba(&pixels, 200, 200, 100.0, 100.0, [20.0, 20.0, 60.0, 40.0], 2.0);
+        let sample = sample_background_from_rgba(
+            &pixels,
+            200,
+            200,
+            100.0,
+            100.0,
+            [20.0, 20.0, 60.0, 40.0],
+            2.0,
+        );
         assert!(sample.used_fallback);
-        assert_eq!(sample.warning.as_deref(), Some("Background could not be sampled reliably; white cover used."));
+        assert_eq!(
+            sample.warning.as_deref(),
+            Some("Background could not be sampled reliably; white cover used.")
+        );
     }
 }

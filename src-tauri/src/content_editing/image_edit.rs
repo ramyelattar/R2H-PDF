@@ -1,9 +1,9 @@
 //! Native image editing: replace, delete, move, crop, and rotate image XObjects.
 
-use std::time::{SystemTime, UNIX_EPOCH};
-use crate::document_core::DocumentCoreState;
-use super::types::*;
 use super::analysis::extract_page_content_objects;
+use super::types::*;
+use crate::document_core::DocumentCoreState;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Replace an image XObject in the PDF with new image data.
 pub fn replace_native_image(
@@ -14,11 +14,16 @@ pub fn replace_native_image(
 
     // Verify the content object exists and is an image.
     let objects = extract_page_content_objects(doc_state, &request.session_id, request.page_index)?;
-    let target = objects.iter().find(|o| o.id == request.content_object_id)
+    let target = objects
+        .iter()
+        .find(|o| o.id == request.content_object_id)
         .ok_or_else(|| format!("Content object not found: {}", request.content_object_id))?;
 
     if target.object_type != ContentObjectType::ImageXobject {
-        return Err(format!("Object {} is not an image (type: {:?})", request.content_object_id, target.object_type));
+        return Err(format!(
+            "Object {} is not an image (type: {:?})",
+            request.content_object_id, target.object_type
+        ));
     }
 
     if target.editable_level == EditableLevel::ReadOnly {
@@ -38,16 +43,21 @@ pub fn replace_native_image(
     let image_bytes = base64::Engine::decode(
         &base64::engine::general_purpose::STANDARD,
         &request.image_bytes_base64,
-    ).map_err(|e| format!("Invalid base64 image data: {e}"))?;
+    )
+    .map_err(|e| format!("Invalid base64 image data: {e}"))?;
 
     // Write to temp file for MuPDF to load.
     let temp_path = std::env::temp_dir().join(format!("r2h_img_replace_{}.png", epoch_ms()));
     std::fs::write(&temp_path, &image_bytes)
         .map_err(|e| format!("Failed to write temp image: {e}"))?;
 
-    let arc = doc_state.store.get_session_arc_pub(&request.session_id)
+    let arc = doc_state
+        .store
+        .get_session_arc_pub(&request.session_id)
         .map_err(|e| e.to_string())?;
-    let mut session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+    let mut session = arc
+        .lock()
+        .map_err(|_| "session lock poisoned".to_string())?;
 
     // Load the PDF and replace the image.
     let mut pdf = mupdf::pdf::PdfDocument::from_bytes(&session.document.bytes)
@@ -61,19 +71,20 @@ pub fn replace_native_image(
     // Clean up temp file.
     let _ = std::fs::remove_file(&temp_path);
 
-    let page_no = i32::try_from(request.page_index)
-        .map_err(|e| format!("page index: {e}"))?;
-    let fz_page = pdf.load_page(page_no)
+    let page_no = i32::try_from(request.page_index).map_err(|e| format!("page index: {e}"))?;
+    let fz_page = pdf
+        .load_page(page_no)
         .map_err(|e| format!("load_page: {e}"))?;
-    let mut pdf_page = mupdf::pdf::PdfPage::try_from(fz_page)
-        .map_err(|e| format!("PdfPage: {e}"))?;
+    let mut pdf_page =
+        mupdf::pdf::PdfPage::try_from(fz_page).map_err(|e| format!("PdfPage: {e}"))?;
 
     // Safe visual replacement: cover the old image bbox and draw the new
     // image into the same rect. This avoids claiming a native XObject swap
     // when the analysis layer cannot prove the original resource name.
     redact_rect_on_page(&mut pdf_page, target.bbox)?;
     let xobj_name = format!("R2HImg{}", epoch_ms());
-    let image_obj = pdf.add_image(&new_image)
+    let image_obj = pdf
+        .add_image(&new_image)
         .map_err(|e| format!("Failed to add image to PDF: {e}"))?;
     let page_obj = pdf_page.object();
     ensure_image_xobject_resource(&pdf, &page_obj, &xobj_name, image_obj)?;
@@ -116,32 +127,42 @@ pub fn delete_native_image(
     let edit_id = format!("img-del-{}", epoch_ms());
 
     let objects = extract_page_content_objects(doc_state, &request.session_id, request.page_index)?;
-    let target = objects.iter().find(|o| o.id == request.content_object_id)
+    let target = objects
+        .iter()
+        .find(|o| o.id == request.content_object_id)
         .ok_or_else(|| format!("Content object not found: {}", request.content_object_id))?;
 
     if target.object_type != ContentObjectType::ImageXobject {
-        return Err(format!("Object {} is not an image", request.content_object_id));
+        return Err(format!(
+            "Object {} is not an image",
+            request.content_object_id
+        ));
     }
 
-    let arc = doc_state.store.get_session_arc_pub(&request.session_id)
+    let arc = doc_state
+        .store
+        .get_session_arc_pub(&request.session_id)
         .map_err(|e| e.to_string())?;
-    let mut session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+    let mut session = arc
+        .lock()
+        .map_err(|_| "session lock poisoned".to_string())?;
 
     // Strategy: Redact the image area with white fill to remove it visually.
-    let mut pdf = mupdf::pdf::PdfDocument::from_bytes(&session.document.bytes)
+    let pdf = mupdf::pdf::PdfDocument::from_bytes(&session.document.bytes)
         .map_err(|e| format!("Failed to open PDF: {e}"))?;
 
-    let page_no = i32::try_from(request.page_index)
-        .map_err(|e| format!("page index: {e}"))?;
-    let fz_page = pdf.load_page(page_no)
+    let page_no = i32::try_from(request.page_index).map_err(|e| format!("page index: {e}"))?;
+    let fz_page = pdf
+        .load_page(page_no)
         .map_err(|e| format!("load_page: {e}"))?;
-    let mut pdf_page = mupdf::pdf::PdfPage::try_from(fz_page)
-        .map_err(|e| format!("PdfPage: {e}"))?;
+    let mut pdf_page =
+        mupdf::pdf::PdfPage::try_from(fz_page).map_err(|e| format!("PdfPage: {e}"))?;
 
     redact_rect_on_page(&mut pdf_page, target.bbox)?;
 
     let mut new_bytes: Vec<u8> = Vec::new();
-    pdf.write_to(&mut new_bytes).map_err(|e| format!("serialize: {e}"))?;
+    pdf.write_to(&mut new_bytes)
+        .map_err(|e| format!("serialize: {e}"))?;
 
     session.document.bytes = new_bytes;
     session.is_dirty = true;
@@ -156,7 +177,8 @@ pub fn delete_native_image(
         action: "delete".to_string(),
         success: true,
         warnings: vec![
-            "Image deleted using visual cover: original image bbox redacted/covered with white.".to_string(),
+            "Image deleted using visual cover: original image bbox redacted/covered with white."
+                .to_string(),
         ],
     })
 }
@@ -170,29 +192,41 @@ pub fn move_native_image(
     let edit_id = format!("img-move-{}", epoch_ms());
 
     let objects = extract_page_content_objects(doc_state, &request.session_id, request.page_index)?;
-    let target = objects.iter().find(|o| o.id == request.content_object_id)
+    let target = objects
+        .iter()
+        .find(|o| o.id == request.content_object_id)
         .ok_or_else(|| format!("Content object not found: {}", request.content_object_id))?;
 
     if target.object_type != ContentObjectType::ImageXobject {
-        return Err(format!("Object {} is not an image", request.content_object_id));
+        return Err(format!(
+            "Object {} is not an image",
+            request.content_object_id
+        ));
     }
 
-    let arc = doc_state.store.get_session_arc_pub(&request.session_id)
+    let arc = doc_state
+        .store
+        .get_session_arc_pub(&request.session_id)
         .map_err(|e| e.to_string())?;
-    let mut session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+    let mut session = arc
+        .lock()
+        .map_err(|_| "session lock poisoned".to_string())?;
 
     let mut pdf = mupdf::pdf::PdfDocument::from_bytes(&session.document.bytes)
         .map_err(|e| format!("Failed to open PDF: {e}"))?;
     let original_image = find_image_for_target(&pdf, request.page_index, target)
         .map_err(|e| format!("Cannot extract original image for move/resize: {e}"))?
-        .ok_or_else(|| "Cannot move image safely: original image pixels could not be extracted for redraw.".to_string())?;
+        .ok_or_else(|| {
+            "Cannot move image safely: original image pixels could not be extracted for redraw."
+                .to_string()
+        })?;
 
-    let page_no = i32::try_from(request.page_index)
-        .map_err(|e| format!("page index: {e}"))?;
-    let fz_page = pdf.load_page(page_no)
+    let page_no = i32::try_from(request.page_index).map_err(|e| format!("page index: {e}"))?;
+    let fz_page = pdf
+        .load_page(page_no)
         .map_err(|e| format!("load_page: {e}"))?;
-    let mut pdf_page = mupdf::pdf::PdfPage::try_from(fz_page)
-        .map_err(|e| format!("PdfPage: {e}"))?;
+    let mut pdf_page =
+        mupdf::pdf::PdfPage::try_from(fz_page).map_err(|e| format!("PdfPage: {e}"))?;
 
     // Step 1: Redact the old image position.
     redact_rect_on_page(&mut pdf_page, target.bbox)?;
@@ -200,7 +234,8 @@ pub fn move_native_image(
     // Step 2: Embed and draw the same image at the new position.
     let new_rect = request.new_rect;
     let xobj_name = format!("R2HImg{}", epoch_ms());
-    let image_obj = pdf.add_image(&original_image)
+    let image_obj = pdf
+        .add_image(&original_image)
         .map_err(|e| format!("Failed to add original image for redraw: {e}"))?;
     let page_obj = pdf_page.object();
     ensure_image_xobject_resource(&pdf, &page_obj, &xobj_name, image_obj)?;
@@ -209,7 +244,8 @@ pub fn move_native_image(
 
     // Serialize back.
     let mut new_bytes: Vec<u8> = Vec::new();
-    pdf.write_to(&mut new_bytes).map_err(|e| format!("serialize: {e}"))?;
+    pdf.write_to(&mut new_bytes)
+        .map_err(|e| format!("serialize: {e}"))?;
 
     session.document.bytes = new_bytes;
     session.is_dirty = true;
@@ -238,33 +274,46 @@ pub fn crop_native_image(
 ) -> Result<NativeImageEditResult, String> {
     let edit_id = format!("img-crop-{}", epoch_ms());
     let objects = extract_page_content_objects(doc_state, &request.session_id, request.page_index)?;
-    let target = objects.iter().find(|o| o.id == request.content_object_id)
+    let target = objects
+        .iter()
+        .find(|o| o.id == request.content_object_id)
         .ok_or_else(|| format!("Content object not found: {}", request.content_object_id))?;
     if target.object_type != ContentObjectType::ImageXobject {
-        return Err(format!("Object {} is not an image", request.content_object_id));
+        return Err(format!(
+            "Object {} is not an image",
+            request.content_object_id
+        ));
     }
     let crop_rect = normalize_crop_rect(target.bbox, request.crop_rect)?;
     let target_rect = request.target_rect.unwrap_or(target.bbox);
 
-    let arc = doc_state.store.get_session_arc_pub(&request.session_id)
+    let arc = doc_state
+        .store
+        .get_session_arc_pub(&request.session_id)
         .map_err(|e| e.to_string())?;
-    let mut session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+    let mut session = arc
+        .lock()
+        .map_err(|_| "session lock poisoned".to_string())?;
     let mut pdf = mupdf::pdf::PdfDocument::from_bytes(&session.document.bytes)
         .map_err(|e| format!("Failed to open PDF: {e}"))?;
     let original_image = find_image_for_target(&pdf, request.page_index, target)
         .map_err(|e| format!("Cannot extract original image for crop: {e}"))?
-        .ok_or_else(|| "Cannot crop image safely: original image pixels could not be extracted for redraw.".to_string())?;
+        .ok_or_else(|| {
+            "Cannot crop image safely: original image pixels could not be extracted for redraw."
+                .to_string()
+        })?;
 
-    let page_no = i32::try_from(request.page_index)
-        .map_err(|e| format!("page index: {e}"))?;
-    let fz_page = pdf.load_page(page_no)
+    let page_no = i32::try_from(request.page_index).map_err(|e| format!("page index: {e}"))?;
+    let fz_page = pdf
+        .load_page(page_no)
         .map_err(|e| format!("load_page: {e}"))?;
-    let mut pdf_page = mupdf::pdf::PdfPage::try_from(fz_page)
-        .map_err(|e| format!("PdfPage: {e}"))?;
+    let mut pdf_page =
+        mupdf::pdf::PdfPage::try_from(fz_page).map_err(|e| format!("PdfPage: {e}"))?;
     redact_rect_on_page(&mut pdf_page, target.bbox)?;
 
     let xobj_name = format!("R2HImg{}", epoch_ms());
-    let image_obj = pdf.add_image(&original_image)
+    let image_obj = pdf
+        .add_image(&original_image)
         .map_err(|e| format!("Failed to add original image for cropped redraw: {e}"))?;
     let page_obj = pdf_page.object();
     ensure_image_xobject_resource(&pdf, &page_obj, &xobj_name, image_obj)?;
@@ -272,7 +321,8 @@ pub fn crop_native_image(
     append_image_draw_ops_to_page_contents(&mut pdf, request.page_index, &xobj_name, &draw_spec)?;
 
     let mut new_bytes: Vec<u8> = Vec::new();
-    pdf.write_to(&mut new_bytes).map_err(|e| format!("serialize: {e}"))?;
+    pdf.write_to(&mut new_bytes)
+        .map_err(|e| format!("serialize: {e}"))?;
     session.document.bytes = new_bytes;
     session.is_dirty = true;
     session.invalidate_cached_document();
@@ -300,31 +350,44 @@ pub fn rotate_native_image(
     let edit_id = format!("img-rot-{}", epoch_ms());
     let normalized = normalize_rotation_degrees(request.degrees)?;
     let objects = extract_page_content_objects(doc_state, &request.session_id, request.page_index)?;
-    let target = objects.iter().find(|o| o.id == request.content_object_id)
+    let target = objects
+        .iter()
+        .find(|o| o.id == request.content_object_id)
         .ok_or_else(|| format!("Content object not found: {}", request.content_object_id))?;
     if target.object_type != ContentObjectType::ImageXobject {
-        return Err(format!("Object {} is not an image", request.content_object_id));
+        return Err(format!(
+            "Object {} is not an image",
+            request.content_object_id
+        ));
     }
 
-    let arc = doc_state.store.get_session_arc_pub(&request.session_id)
+    let arc = doc_state
+        .store
+        .get_session_arc_pub(&request.session_id)
         .map_err(|e| e.to_string())?;
-    let mut session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+    let mut session = arc
+        .lock()
+        .map_err(|_| "session lock poisoned".to_string())?;
     let mut pdf = mupdf::pdf::PdfDocument::from_bytes(&session.document.bytes)
         .map_err(|e| format!("Failed to open PDF: {e}"))?;
     let original_image = find_image_for_target(&pdf, request.page_index, target)
         .map_err(|e| format!("Cannot extract original image for rotation: {e}"))?
-        .ok_or_else(|| "Cannot rotate image safely: original image pixels could not be extracted for redraw.".to_string())?;
+        .ok_or_else(|| {
+            "Cannot rotate image safely: original image pixels could not be extracted for redraw."
+                .to_string()
+        })?;
 
-    let page_no = i32::try_from(request.page_index)
-        .map_err(|e| format!("page index: {e}"))?;
-    let fz_page = pdf.load_page(page_no)
+    let page_no = i32::try_from(request.page_index).map_err(|e| format!("page index: {e}"))?;
+    let fz_page = pdf
+        .load_page(page_no)
         .map_err(|e| format!("load_page: {e}"))?;
-    let mut pdf_page = mupdf::pdf::PdfPage::try_from(fz_page)
-        .map_err(|e| format!("PdfPage: {e}"))?;
+    let mut pdf_page =
+        mupdf::pdf::PdfPage::try_from(fz_page).map_err(|e| format!("PdfPage: {e}"))?;
     redact_rect_on_page(&mut pdf_page, target.bbox)?;
 
     let xobj_name = format!("R2HImg{}", epoch_ms());
-    let image_obj = pdf.add_image(&original_image)
+    let image_obj = pdf
+        .add_image(&original_image)
         .map_err(|e| format!("Failed to add original image for rotated redraw: {e}"))?;
     let page_obj = pdf_page.object();
     ensure_image_xobject_resource(&pdf, &page_obj, &xobj_name, image_obj)?;
@@ -332,7 +395,8 @@ pub fn rotate_native_image(
     append_image_draw_ops_to_page_contents(&mut pdf, request.page_index, &xobj_name, &draw_spec)?;
 
     let mut new_bytes: Vec<u8> = Vec::new();
-    pdf.write_to(&mut new_bytes).map_err(|e| format!("serialize: {e}"))?;
+    pdf.write_to(&mut new_bytes)
+        .map_err(|e| format!("serialize: {e}"))?;
     session.document.bytes = new_bytes;
     session.is_dirty = true;
     session.invalidate_cached_document();
@@ -353,10 +417,14 @@ pub fn rotate_native_image(
 
 fn redact_rect_on_page(pdf_page: &mut mupdf::pdf::PdfPage, bbox: [f32; 4]) -> Result<(), String> {
     let rect = mupdf::Rect::new(bbox[0], bbox[1], bbox[2], bbox[3]);
-    let mut redact = pdf_page.create_annotation(mupdf::pdf::PdfAnnotationType::Redact)
+    let mut redact = pdf_page
+        .create_annotation(mupdf::pdf::PdfAnnotationType::Redact)
         .map_err(|e| format!("create redact: {e}"))?;
-    redact.set_rect(rect).map_err(|e| format!("set_rect: {e}"))?;
-    redact.set_color(mupdf::color::AnnotationColor::Gray(1.0))
+    redact
+        .set_rect(rect)
+        .map_err(|e| format!("set_rect: {e}"))?;
+    redact
+        .set_color(mupdf::color::AnnotationColor::Gray(1.0))
         .map_err(|e| format!("set_color: {e}"))?;
     drop(redact);
     pdf_page.redact().map_err(|e| format!("redact: {e}"))?;
@@ -373,8 +441,11 @@ fn ensure_image_xobject_resource(
     let resources = match page_obj.get_dict("Resources") {
         Ok(Some(r)) => r,
         Ok(None) => {
-            let new_resources = pdf.new_dict().map_err(|e| format!("new Resources dict: {e}"))?;
-            page_obj_mut.dict_put("Resources", new_resources.clone())
+            let new_resources = pdf
+                .new_dict()
+                .map_err(|e| format!("new Resources dict: {e}"))?;
+            page_obj_mut
+                .dict_put("Resources", new_resources.clone())
                 .map_err(|e| format!("dict_put Resources: {e}"))?;
             new_resources
         }
@@ -384,14 +455,18 @@ fn ensure_image_xobject_resource(
     let mut xobjects = match resources.get_dict("XObject") {
         Ok(Some(x)) => x,
         Ok(None) => {
-            let new_xobjects = pdf.new_dict().map_err(|e| format!("new XObject dict: {e}"))?;
-            resources_mut.dict_put("XObject", new_xobjects.clone())
+            let new_xobjects = pdf
+                .new_dict()
+                .map_err(|e| format!("new XObject dict: {e}"))?;
+            resources_mut
+                .dict_put("XObject", new_xobjects.clone())
                 .map_err(|e| format!("dict_put XObject: {e}"))?;
             new_xobjects
         }
         Err(e) => return Err(format!("get XObject: {e}")),
     };
-    xobjects.dict_put(name, image_obj)
+    xobjects
+        .dict_put(name, image_obj)
         .map_err(|e| format!("dict_put image XObject /{name}: {e}"))?;
     Ok(())
 }
@@ -403,26 +478,45 @@ fn append_image_draw_ops_to_page_contents(
     spec: &ImageDrawSpec,
 ) -> Result<(), String> {
     let ops = build_image_draw_ops(xobject_name, spec)?;
-    let stream_dict = pdf.new_dict().map_err(|e| format!("new image stream dict: {e}"))?;
-    let mut new_stream = pdf.add_object(&stream_dict).map_err(|e| format!("add image draw stream: {e}"))?;
-    new_stream.write_stream_string(&ops)
+    let stream_dict = pdf
+        .new_dict()
+        .map_err(|e| format!("new image stream dict: {e}"))?;
+    let mut new_stream = pdf
+        .add_object(&stream_dict)
+        .map_err(|e| format!("add image draw stream: {e}"))?;
+    new_stream
+        .write_stream_string(&ops)
         .map_err(|e| format!("write image draw stream: {e}"))?;
 
     let page_no = i32::try_from(page_index).map_err(|e| format!("page index: {e}"))?;
-    let mut page_dict = pdf.find_page(page_no).map_err(|e| format!("find_page image append: {e}"))?;
-    match page_dict.get_dict("Contents").map_err(|e| format!("get Contents image append: {e}"))? {
+    let mut page_dict = pdf
+        .find_page(page_no)
+        .map_err(|e| format!("find_page image append: {e}"))?;
+    match page_dict
+        .get_dict("Contents")
+        .map_err(|e| format!("get Contents image append: {e}"))?
+    {
         Some(contents) if contents.is_array().unwrap_or(false) => {
             let mut arr = contents;
-            arr.array_push(new_stream).map_err(|e| format!("array_push image stream: {e}"))?;
+            arr.array_push(new_stream)
+                .map_err(|e| format!("array_push image stream: {e}"))?;
         }
         Some(contents) => {
-            let mut arr = pdf.new_array().map_err(|e| format!("new Contents array: {e}"))?;
-            arr.array_push(contents).map_err(|e| format!("array_push existing Contents: {e}"))?;
-            arr.array_push(new_stream).map_err(|e| format!("array_push image stream: {e}"))?;
-            page_dict.dict_put("Contents", arr).map_err(|e| format!("dict_put Contents array: {e}"))?;
+            let mut arr = pdf
+                .new_array()
+                .map_err(|e| format!("new Contents array: {e}"))?;
+            arr.array_push(contents)
+                .map_err(|e| format!("array_push existing Contents: {e}"))?;
+            arr.array_push(new_stream)
+                .map_err(|e| format!("array_push image stream: {e}"))?;
+            page_dict
+                .dict_put("Contents", arr)
+                .map_err(|e| format!("dict_put Contents array: {e}"))?;
         }
         None => {
-            page_dict.dict_put("Contents", new_stream).map_err(|e| format!("dict_put image Contents: {e}"))?;
+            page_dict
+                .dict_put("Contents", new_stream)
+                .map_err(|e| format!("dict_put image Contents: {e}"))?;
         }
     }
     Ok(())
@@ -438,7 +532,14 @@ impl ImageDrawSpec {
     fn simple(rect: [f32; 4]) -> Result<Self, String> {
         validate_rect(rect, "image draw rect")?;
         Ok(Self {
-            matrix: [rect[2] - rect[0], 0.0, 0.0, rect[3] - rect[1], rect[0], rect[1]],
+            matrix: [
+                rect[2] - rect[0],
+                0.0,
+                0.0,
+                rect[3] - rect[1],
+                rect[0],
+                rect[1],
+            ],
             clip_rect: None,
         })
     }
@@ -479,7 +580,11 @@ fn build_replacement_draw_spec(
     image_height: f32,
 ) -> Result<ImageDrawSpec, String> {
     validate_rect(bbox, "image replacement bbox")?;
-    if image_width <= 0.0 || image_height <= 0.0 || !image_width.is_finite() || !image_height.is_finite() {
+    if image_width <= 0.0
+        || image_height <= 0.0
+        || !image_width.is_finite()
+        || !image_height.is_finite()
+    {
         return Err("replacement image dimensions are invalid".to_string());
     }
     let bbox_w = bbox[2] - bbox[0];
@@ -550,7 +655,7 @@ fn build_crop_draw_spec(
 }
 
 fn normalize_rotation_degrees(degrees: i32) -> Result<i32, String> {
-    let normalized = ((degrees % 360) + 360) % 360;
+    let normalized = degrees.rem_euclid(360);
     match normalized {
         0 | 90 | 180 | 270 => Ok(normalized),
         _ => Err("Custom image rotation is disabled: only 90, 180, and 270 degree export-safe increments are supported.".to_string()),
@@ -601,14 +706,19 @@ fn find_image_for_target(
     target: &ContentObject,
 ) -> Result<Option<mupdf::Image>, String> {
     let page_no = i32::try_from(page_index).map_err(|e| format!("page index: {e}"))?;
-    let page = pdf.load_page(page_no).map_err(|e| format!("load_page: {e}"))?;
-    let text_page = page.to_text_page(mupdf::TextPageFlags::COLLECT_VECTORS)
+    let page = pdf
+        .load_page(page_no)
+        .map_err(|e| format!("load_page: {e}"))?;
+    let text_page = page
+        .to_text_page(mupdf::TextPageFlags::COLLECT_VECTORS)
         .map_err(|e| format!("to_text_page: {e}"))?;
     for block in text_page.blocks() {
         if block.r#type() != mupdf::text_page::TextBlockType::Image {
             continue;
         }
-        let Some(transform) = block.ctm() else { continue; };
+        let Some(transform) = block.ctm() else {
+            continue;
+        };
         let bbox = [
             transform.e,
             transform.f,
@@ -630,7 +740,10 @@ fn rects_close(a: [f32; 4], b: [f32; 4], eps: f32) -> bool {
 }
 
 fn epoch_ms() -> u128 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
 }
 
 #[cfg(test)]

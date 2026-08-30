@@ -20,12 +20,8 @@
 
 #![cfg(test)]
 
-use super::encoding_map::{
-    build_base_encoding_map, build_with_differences, ForwardMapSource,
-};
-use super::font_registry::{
-    classify_font_info_from_parts, EncodingKind, FontResourceInfo,
-};
+use super::encoding_map::{build_base_encoding_map, build_with_differences, ForwardMapSource};
+use super::font_registry::{classify_font_info_from_parts, EncodingKind, FontResourceInfo};
 use super::stream_parser::{
     find_text_operations, replace_text_in_stream_encoded, text_matches, EncodingTarget,
     TextOperatorKind,
@@ -92,7 +88,10 @@ fn word_simple_text_native_edit_round_trip() {
 
     let target = ops.iter().find(|o| text_matches(o, "Hello World")).unwrap();
     let new_bytes = replace_text_in_stream_encoded(
-        WORD_LIKE_STREAM, target, "Goodbye Mars", EncodingTarget::WinAnsi,
+        WORD_LIKE_STREAM,
+        target,
+        "Goodbye Mars",
+        EncodingTarget::WinAnsi,
     );
     let s = String::from_utf8_lossy(&new_bytes);
     assert!(s.contains("(Goodbye Mars)"));
@@ -109,8 +108,7 @@ fn word_simple_text_native_edit_round_trip() {
 
 // ─── Round-trip 2: LibreOffice-export-style TJ array ───────────────
 
-const LIBRE_LIKE_STREAM: &[u8] =
-    b"BT /F1 11 Tf 72 700 Td [(Hel) -10 (lo) -20 ( World)] TJ ET";
+const LIBRE_LIKE_STREAM: &[u8] = b"BT /F1 11 Tf 72 700 Td [(Hel) -10 (lo) -20 ( World)] TJ ET";
 
 #[test]
 fn libreoffice_tj_array_native_edit_round_trip() {
@@ -123,7 +121,10 @@ fn libreoffice_tj_array_native_edit_round_trip() {
     assert!(matches!(d.strategy, TextEditStrategy::NativeInPlace));
 
     let new_bytes = replace_text_in_stream_encoded(
-        LIBRE_LIKE_STREAM, &ops[0], "Hi Earth", EncodingTarget::WinAnsi,
+        LIBRE_LIKE_STREAM,
+        &ops[0],
+        "Hi Earth",
+        EncodingTarget::WinAnsi,
     );
     let s = String::from_utf8_lossy(&new_bytes);
     // The TJ array is collapsed to a simple Tj on rewrite.
@@ -143,9 +144,8 @@ fn repeated_text_edit_targets_only_correct_occurrence() {
     assert!(ops.iter().all(|o| o.text == "Total"));
     // Pick the second occurrence (op_index 1).
     let target = &ops[1];
-    let new_bytes = replace_text_in_stream_encoded(
-        REPEATED_STREAM, target, "Sum", EncodingTarget::WinAnsi,
-    );
+    let new_bytes =
+        replace_text_in_stream_encoded(REPEATED_STREAM, target, "Sum", EncodingTarget::WinAnsi);
     let s = String::from_utf8_lossy(&new_bytes);
     // The first and third occurrences must still be "Total".
     let ops2 = find_text_operations(&new_bytes);
@@ -164,8 +164,14 @@ fn repeated_text_edit_targets_only_correct_occurrence() {
 fn subset_font_blocks_native_and_routes_to_visual() {
     let registry = vec![subset_type1("F1")];
     let d = classify_text_edit_strategy(Some("F1"), &registry, "Hello");
-    assert!(matches!(d.strategy, TextEditStrategy::SafeVisualReplacement));
-    assert!(d.reasons.iter().any(|r| r.to_lowercase().contains("subset")));
+    assert!(matches!(
+        d.strategy,
+        TextEditStrategy::SafeVisualReplacement
+    ));
+    assert!(d
+        .reasons
+        .iter()
+        .any(|r| r.to_lowercase().contains("subset")));
     // Round-trip honest: the synthetic stream must not be touched by
     // the native path. We simulate this by NOT calling the encoder when
     // strategy != NativeInPlace.
@@ -179,8 +185,14 @@ fn subset_font_blocks_native_and_routes_to_visual() {
 fn identity_h_blocks_native_and_routes_to_visual() {
     let registry = vec![identity_h_type0("F0")];
     let d = classify_text_edit_strategy(Some("F0"), &registry, "Hello");
-    assert!(matches!(d.strategy, TextEditStrategy::SafeVisualReplacement));
-    assert!(d.reasons.iter().any(|r| r.to_lowercase().contains("identity-h")));
+    assert!(matches!(
+        d.strategy,
+        TextEditStrategy::SafeVisualReplacement
+    ));
+    assert!(d
+        .reasons
+        .iter()
+        .any(|r| r.to_lowercase().contains("identity-h")));
 }
 
 // ─── Round-trip 6: multi-stream not lost — simulate the parser at
@@ -196,7 +208,10 @@ fn multi_stream_edit_preserves_other_stream() {
     assert_eq!(ops_b.len(), 1);
     // Edit stream A only.
     let new_a = replace_text_in_stream_encoded(
-        stream_a, &ops_a[0], "Edited header", EncodingTarget::WinAnsi,
+        stream_a,
+        &ops_a[0],
+        "Edited header",
+        EncodingTarget::WinAnsi,
     );
     // Stream B must be byte-identical to the original.
     let s_a = String::from_utf8_lossy(&new_a);
@@ -212,9 +227,8 @@ fn multi_stream_edit_preserves_other_stream() {
 fn latin1_replacement_round_trips_via_winansi() {
     let stream: &[u8] = b"BT /F1 12 Tf 72 700 Td (Cafe) Tj ET";
     let ops = find_text_operations(stream);
-    let new_bytes = replace_text_in_stream_encoded(
-        stream, &ops[0], "Café", EncodingTarget::WinAnsi,
-    );
+    let new_bytes =
+        replace_text_in_stream_encoded(stream, &ops[0], "Café", EncodingTarget::WinAnsi);
     let s = String::from_utf8_lossy(&new_bytes);
     // é encoded as octal \351, not UTF-8 multibyte.
     assert!(s.contains("(Caf\\351)"));
@@ -245,9 +259,10 @@ fn differences_map_encodes_eacute_round_trip() {
     // Build a forward map for a font with WinAnsi base + Differences
     // override at 0xE9 → /eacute. The replacement "Café" should encode
     // to bytes [C, a, f, 0xE9].
-    let diffs = vec![
-        DifferencesEntry { code: 0xE9, glyph_name: "eacute".to_string() },
-    ];
+    let diffs = vec![DifferencesEntry {
+        code: 0xE9,
+        glyph_name: "eacute".to_string(),
+    }];
     let map = build_with_differences("F1", EncodingKind::WinAnsi, &diffs);
     assert!(matches!(map.source, ForwardMapSource::BasePlusDifferences));
     let bytes = map.forward_lookup("Café").unwrap();
@@ -258,9 +273,10 @@ fn differences_map_encodes_eacute_round_trip() {
 
 #[test]
 fn differences_with_unknown_glyph_falls_back() {
-    let diffs = vec![
-        DifferencesEntry { code: 0xE9, glyph_name: "unknown_glyph_xyz".to_string() },
-    ];
+    let diffs = vec![DifferencesEntry {
+        code: 0xE9,
+        glyph_name: "unknown_glyph_xyz".to_string(),
+    }];
     let map = build_with_differences("F1", EncodingKind::WinAnsi, &diffs);
     // Forward-lookup for "é" still works via base encoding (0xE9 was
     // already in base WinAnsi), but the warning records the rejection.
@@ -298,7 +314,8 @@ fn same_decoded_text_different_codes_targets_only_correct_op() {
 fn latin1_replacement_searchable_after_edit() {
     let stream: &[u8] = b"BT (Cafe) Tj ET";
     let ops = find_text_operations(stream);
-    let new_bytes = replace_text_in_stream_encoded(stream, &ops[0], "Café", EncodingTarget::WinAnsi);
+    let new_bytes =
+        replace_text_in_stream_encoded(stream, &ops[0], "Café", EncodingTarget::WinAnsi);
     // The escape \351 in PDF string literals decodes to byte 0xE9 (é).
     let s = String::from_utf8_lossy(&new_bytes);
     assert!(s.contains("\\351"));
@@ -315,19 +332,19 @@ fn differences_end_to_end_emits_byte_via_forward_map() {
     // Simulate a Word-like page with a custom Differences table:
     //   /Encoding << /BaseEncoding /WinAnsiEncoding /Differences [233 /eacute] >>
     // The forward map should yield bytes [C, a, f, 0xE9] for "Café".
-    let diffs = vec![DifferencesEntry { code: 0xE9, glyph_name: "eacute".to_string() }];
-    let fmap = super::encoding_map::build_with_differences(
-        "F1", EncodingKind::WinAnsi, &diffs,
-    );
+    let diffs = vec![DifferencesEntry {
+        code: 0xE9,
+        glyph_name: "eacute".to_string(),
+    }];
+    let fmap = super::encoding_map::build_with_differences("F1", EncodingKind::WinAnsi, &diffs);
     let bytes = fmap.forward_lookup("Café").unwrap();
     assert_eq!(bytes, b"Caf\xE9");
 
     // Use those exact bytes to replace a Tj operand.
     let stream: &[u8] = b"BT /F1 12 Tf 72 700 Td (Cafe) Tj ET";
     let ops = find_text_operations(stream);
-    let new_bytes = super::stream_parser::replace_text_in_stream_with_bytes(
-        stream, &ops[0], &bytes,
-    );
+    let new_bytes =
+        super::stream_parser::replace_text_in_stream_with_bytes(stream, &ops[0], &bytes);
     let s = String::from_utf8_lossy(&new_bytes);
     // Byte 0xE9 is emitted as octal \351 inside the PDF string literal.
     assert!(s.contains("(Caf\\351)"), "got: {s}");
@@ -342,10 +359,11 @@ fn differences_end_to_end_emits_byte_via_forward_map() {
 #[test]
 fn differences_end_to_end_unmapped_char_does_not_emit_bytes() {
     // No mapping for U+4E2D in the forward map → forward_lookup fails.
-    let diffs = vec![DifferencesEntry { code: 0xE9, glyph_name: "eacute".to_string() }];
-    let fmap = super::encoding_map::build_with_differences(
-        "F1", EncodingKind::WinAnsi, &diffs,
-    );
+    let diffs = vec![DifferencesEntry {
+        code: 0xE9,
+        glyph_name: "eacute".to_string(),
+    }];
+    let fmap = super::encoding_map::build_with_differences("F1", EncodingKind::WinAnsi, &diffs);
     let res = fmap.forward_lookup("Hi 中");
     assert!(res.is_err());
 }

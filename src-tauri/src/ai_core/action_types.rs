@@ -105,7 +105,10 @@ impl AiProposedAction {
         if self.page_index >= page_count {
             errors.push(ActionValidationError {
                 field: "page_index".to_string(),
-                message: format!("Page {} is out of bounds (document has {} pages)", self.page_index, page_count),
+                message: format!(
+                    "Page {} is out of bounds (document has {} pages)",
+                    self.page_index, page_count
+                ),
             });
         }
 
@@ -151,7 +154,12 @@ mod tests {
             action_type: AiActionType::AddComment,
             session_id: "s1".to_string(),
             page_index: 0,
-            rect: AiActionRect { x: 72.0, y: 700.0, width: 200.0, height: 30.0 },
+            rect: AiActionRect {
+                x: 72.0,
+                y: 700.0,
+                width: 200.0,
+                height: 30.0,
+            },
             text: "Risk clause identified".to_string(),
             reason: "This clause contains termination risk".to_string(),
             confidence: 0.85,

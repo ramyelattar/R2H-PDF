@@ -1431,7 +1431,7 @@ fn save_rgba_as_png(
     }
 
     // Rename to the expected path (worker reads .ppm just fine via PIL).
-    if path != &ppm_path {
+    if path != ppm_path {
         std::fs::rename(&ppm_path, path).map_err(|e| format!("Failed to rename image: {e}"))?;
     }
 

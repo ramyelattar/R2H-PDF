@@ -10,6 +10,12 @@ pub struct TextExtractionPipeline {
     pub total_extractions: Cell<usize>,
 }
 
+impl Default for TextExtractionPipeline {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TextExtractionPipeline {
     pub fn new() -> Self {
         Self {

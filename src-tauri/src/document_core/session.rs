@@ -123,6 +123,12 @@ pub struct SessionStore {
     next_id: Mutex<u64>,
 }
 
+impl Default for SessionStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SessionStore {
     pub fn new() -> Self {
         Self {
@@ -336,7 +342,8 @@ impl SessionStore {
     ) -> Result<NativeVectorPageResult, DocumentCoreError> {
         let arc = self.get_session_arc(&request.session_id)?;
         let session = arc.lock().map_err(|_| DocumentCoreError::LockPoisoned)?;
-        self.engine.extract_native_vectors(&session.document, &request)
+        self.engine
+            .extract_native_vectors(&session.document, &request)
     }
 
     pub fn extract_all_pages_text(
@@ -597,6 +604,12 @@ impl SessionStore {
 #[derive(Clone)]
 pub struct DocumentCoreState {
     pub store: Arc<SessionStore>,
+}
+
+impl Default for DocumentCoreState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DocumentCoreState {

@@ -1,4 +1,6 @@
-use super::types::{MemoryControlAction, MemoryControlModelResponse, MemoryPolicy, MemorySnapshotInput};
+use super::types::{
+    MemoryControlAction, MemoryControlModelResponse, MemoryPolicy, MemorySnapshotInput,
+};
 
 pub struct MemoryController {
     pub policy: MemoryPolicy,

@@ -3,7 +3,19 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EngineeringUnit {
-    W, KW, VA, KVA, A, V, Phase, PowerFactor, Quantity, Unknown,
+    W,
+    KW,
+    VA,
+    // Electrical-engineering SI unit spellings (kilowatt, kilovolt-ampere);
+    // the uppercase forms are the correct domain notation, not acronyms.
+    #[allow(clippy::upper_case_acronyms)]
+    KVA,
+    A,
+    V,
+    Phase,
+    PowerFactor,
+    Quantity,
+    Unknown,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,7 +67,12 @@ pub struct CalculationTrace {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum FindingSeverity { Info, Warning, Major, Critical }
+pub enum FindingSeverity {
+    Info,
+    Warning,
+    Major,
+    Critical,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EngineeringFinding {

@@ -88,14 +88,27 @@ fn validate_field_name(name: &str) -> Result<(), String> {
         return Err("field name cannot be empty".to_string());
     }
     if name.len() > MAX_NAME_LEN {
-        return Err(format!("field name length {} exceeds max {}", name.len(), MAX_NAME_LEN));
+        return Err(format!(
+            "field name length {} exceeds max {}",
+            name.len(),
+            MAX_NAME_LEN
+        ));
     }
     for ch in name.chars() {
         if !ch.is_ascii() || ch.is_ascii_control() {
-            return Err(format!("field name contains non-ASCII or control character: {:?}", ch));
+            return Err(format!(
+                "field name contains non-ASCII or control character: {:?}",
+                ch
+            ));
         }
-        if matches!(ch, '.' | '/' | '(' | ')' | '<' | '>' | '[' | ']' | '%' | '#') {
-            return Err(format!("field name contains reserved PDF character: {:?}", ch));
+        if matches!(
+            ch,
+            '.' | '/' | '(' | ')' | '<' | '>' | '[' | ']' | '%' | '#'
+        ) {
+            return Err(format!(
+                "field name contains reserved PDF character: {:?}",
+                ch
+            ));
         }
     }
     Ok(())
@@ -180,9 +193,9 @@ pub fn create_form_field(
 
     let dict_str = build_field_dict_str(request, &final_name);
 
-    let field_obj = pdf_doc
-        .new_object_from_str(&dict_str)
-        .map_err(|e| DocumentCoreError::InvalidPdf(format!("invalid field dict: {e}; dict={dict_str}")))?;
+    let field_obj = pdf_doc.new_object_from_str(&dict_str).map_err(|e| {
+        DocumentCoreError::InvalidPdf(format!("invalid field dict: {e}; dict={dict_str}"))
+    })?;
 
     let field_indirect = pdf_doc
         .add_object(&field_obj)
@@ -215,7 +228,9 @@ pub fn delete_form_field(
     request: &DeleteFormFieldRequest,
 ) -> Result<FormFieldOperationResult, DocumentCoreError> {
     if request.field_name.is_empty() {
-        return Err(DocumentCoreError::InvalidPdf("field name cannot be empty".to_string()));
+        return Err(DocumentCoreError::InvalidPdf(
+            "field name cannot be empty".to_string(),
+        ));
     }
 
     let mut pdf_doc = PdfDocument::from_bytes(&doc.bytes)
@@ -229,7 +244,9 @@ pub fn delete_form_field(
 
     let acro_form = root.get_dict("AcroForm").map_err(map_err)?;
     let Some(acro_form) = acro_form else {
-        return Err(DocumentCoreError::InvalidPdf("no AcroForm in document".to_string()));
+        return Err(DocumentCoreError::InvalidPdf(
+            "no AcroForm in document".to_string(),
+        ));
     };
 
     let mut fields_arr = acro_form
@@ -245,7 +262,10 @@ pub fn delete_form_field(
             Some(e) => e,
             None => continue,
         };
-        let resolved = elem.resolve().map_err(map_err)?.unwrap_or(elem.try_clone().map_err(map_err)?);
+        let resolved = elem
+            .resolve()
+            .map_err(map_err)?
+            .unwrap_or(elem.try_clone().map_err(map_err)?);
         let name = resolved
             .get_dict("T")
             .map_err(map_err)?
@@ -275,7 +295,7 @@ pub fn delete_form_field(
         for page_idx in 0..page_count {
             if let Ok(page_obj) = pdf_doc.find_page(page_idx as i32) {
                 let resolved = page_obj.resolve().map_err(map_err)?;
-                let mut page_dict = resolved.unwrap_or(page_obj);
+                let page_dict = resolved.unwrap_or(page_obj);
                 if let Some(mut annots) = page_dict.get_dict("Annots").map_err(map_err)? {
                     let annots_len = annots.len().unwrap_or(0);
                     // Iterate in reverse so deletions don't shift remaining indices.
@@ -321,7 +341,9 @@ pub fn update_form_field_properties(
     request: &UpdateFormFieldPropertiesRequest,
 ) -> Result<FormFieldOperationResult, DocumentCoreError> {
     if request.field_name.is_empty() {
-        return Err(DocumentCoreError::InvalidPdf("field name cannot be empty".to_string()));
+        return Err(DocumentCoreError::InvalidPdf(
+            "field name cannot be empty".to_string(),
+        ));
     }
 
     let mut pdf_doc = PdfDocument::from_bytes(&doc.bytes)
@@ -377,17 +399,25 @@ pub fn update_form_field_properties(
             .and_then(|f| f.as_int().ok())
             .unwrap_or(0);
         if let Some(ro) = request.read_only {
-            if ro { ff |= 1; } else { ff &= !1; }
+            if ro {
+                ff |= 1;
+            } else {
+                ff &= !1;
+            }
         }
         if let Some(req) = request.required {
-            if req { ff |= 2; } else { ff &= !2; }
+            if req {
+                ff |= 2;
+            } else {
+                ff &= !2;
+            }
         }
         let ff_obj = mupdf::pdf::PdfObject::new_int(ff).map_err(map_err)?;
         field.dict_put("Ff", ff_obj).map_err(map_err)?;
     }
 
     if let Some(fs) = request.font_size {
-        let fs_clamped = fs.max(1.0).min(72.0);
+        let fs_clamped = fs.clamp(1.0, 72.0);
         let da_obj = mupdf::pdf::PdfObject::new_string(&format!("/Helv {fs_clamped} Tf 0 0 0 rg"))
             .map_err(map_err)?;
         field.dict_put("DA", da_obj).map_err(map_err)?;
@@ -417,14 +447,18 @@ fn map_err(e: mupdf::Error) -> DocumentCoreError {
 /// for the requested field type.
 fn build_field_dict_str(req: &CreateFormFieldRequest, name: &str) -> String {
     let [x0, y0, x1, y1] = req.rect;
-    let font_size = req.font_size.unwrap_or(12.0).max(1.0).min(72.0);
+    let font_size = req.font_size.unwrap_or(12.0).clamp(1.0, 72.0);
     let da = format!("/Helv {font_size} Tf 0 0 0 rg");
     let name_escaped = escape_pdf_string(name);
 
     // Field flags: read-only bit 1, required bit 2.
     let mut ff = 0;
-    if req.read_only.unwrap_or(false) { ff |= 1; }
-    if req.required.unwrap_or(false) { ff |= 2; }
+    if req.read_only.unwrap_or(false) {
+        ff |= 1;
+    }
+    if req.required.unwrap_or(false) {
+        ff |= 2;
+    }
 
     // Border + fill color appearance characteristics — populated when provided.
     let mk = build_mk_dict(req.border_color, req.fill_color);
@@ -440,24 +474,40 @@ fn build_field_dict_str(req: &CreateFormFieldRequest, name: &str) -> String {
                  /V ({v}) /DV ({dv}) \
                  /Rect [{x0} {y0} {x1} {y1}] \
                  /Ff {ff} /F 4 /DA ({da}) /Q 0 {mk}>>",
-                name = name_escaped, v = v_esc, dv = dv_esc,
-                x0 = x0, y0 = y0, x1 = x1, y1 = y1,
-                ff = ff, da = da, mk = mk,
+                name = name_escaped,
+                v = v_esc,
+                dv = dv_esc,
+                x0 = x0,
+                y0 = y0,
+                x1 = x1,
+                y1 = y1,
+                ff = ff,
+                da = da,
+                mk = mk,
             )
         }
         CreateFieldType::Checkbox => {
             // Checkboxes use /Btn with /Ff bit 16 NOT set.
             let initial = req.value.as_deref().unwrap_or("Off");
             // Map common truthy values to /Yes.
-            let v_name = if matches!(initial, "Yes" | "On" | "true" | "1" | "checked") { "Yes" } else { "Off" };
+            let v_name = if matches!(initial, "Yes" | "On" | "true" | "1" | "checked") {
+                "Yes"
+            } else {
+                "Off"
+            };
             format!(
                 "<</Type /Annot /Subtype /Widget /FT /Btn /T ({name}) \
                  /V /{v_name} /AS /{v_name} /DV /Off \
                  /Rect [{x0} {y0} {x1} {y1}] \
                  /Ff {ff} /F 4 {mk}>>",
-                name = name_escaped, v_name = v_name,
-                x0 = x0, y0 = y0, x1 = x1, y1 = y1,
-                ff = ff, mk = mk,
+                name = name_escaped,
+                v_name = v_name,
+                x0 = x0,
+                y0 = y0,
+                x1 = x1,
+                y1 = y1,
+                ff = ff,
+                mk = mk,
             )
         }
         CreateFieldType::Radio => {
@@ -468,8 +518,12 @@ fn build_field_dict_str(req: &CreateFormFieldRequest, name: &str) -> String {
                  /V /Off /AS /Off /DV /Off \
                  /Rect [{x0} {y0} {x1} {y1}] \
                  /Ff {ff} /F 4 {mk}>>",
-                name = name_escaped, ff = radio_ff,
-                x0 = x0, y0 = y0, x1 = x1, y1 = y1,
+                name = name_escaped,
+                ff = radio_ff,
+                x0 = x0,
+                y0 = y0,
+                x1 = x1,
+                y1 = y1,
                 mk = mk,
             )
         }
@@ -494,9 +548,16 @@ fn build_field_dict_str(req: &CreateFormFieldRequest, name: &str) -> String {
                  /V ({v}) {opt} \
                  /Rect [{x0} {y0} {x1} {y1}] \
                  /Ff {ff} /F 4 /DA ({da}) {mk}>>",
-                name = name_escaped, v = v_esc, opt = opt_arr,
-                x0 = x0, y0 = y0, x1 = x1, y1 = y1,
-                ff = ch_ff, da = da, mk = mk,
+                name = name_escaped,
+                v = v_esc,
+                opt = opt_arr,
+                x0 = x0,
+                y0 = y0,
+                x1 = x1,
+                y1 = y1,
+                ff = ch_ff,
+                da = da,
+                mk = mk,
             )
         }
         CreateFieldType::Signature => {
@@ -505,15 +566,21 @@ fn build_field_dict_str(req: &CreateFormFieldRequest, name: &str) -> String {
                  /Rect [{x0} {y0} {x1} {y1}] \
                  /Ff {ff} /F 4 {mk}>>",
                 name = name_escaped,
-                x0 = x0, y0 = y0, x1 = x1, y1 = y1,
-                ff = ff, mk = mk,
+                x0 = x0,
+                y0 = y0,
+                x1 = x1,
+                y1 = y1,
+                ff = ff,
+                mk = mk,
             )
         }
     }
 }
 
 fn build_mk_dict(border: Option<[f32; 3]>, fill: Option<[f32; 3]>) -> String {
-    if border.is_none() && fill.is_none() { return String::new(); }
+    if border.is_none() && fill.is_none() {
+        return String::new();
+    }
     let mut parts = Vec::new();
     if let Some([r, g, b]) = border {
         parts.push(format!("/BC [{r} {g} {b}]"));
@@ -546,7 +613,9 @@ fn append_to_acroform_fields(
                 Some(f) => f,
                 None => {
                     let new_arr = pdf_doc.new_array().map_err(map_err)?;
-                    acro_dict.dict_put("Fields", new_arr.try_clone().map_err(map_err)?).map_err(map_err)?;
+                    acro_dict
+                        .dict_put("Fields", new_arr.try_clone().map_err(map_err)?)
+                        .map_err(map_err)?;
                     new_arr
                 }
             };
@@ -555,7 +624,9 @@ fn append_to_acroform_fields(
                 .map_err(map_err)?;
             // NeedAppearances so viewers regenerate /AP.
             let true_obj = mupdf::pdf::PdfObject::new_bool(true);
-            acro_dict.dict_put("NeedAppearances", true_obj).map_err(map_err)?;
+            acro_dict
+                .dict_put("NeedAppearances", true_obj)
+                .map_err(map_err)?;
         }
         None => {
             let mut new_acro = pdf_doc.new_dict().map_err(map_err)?;
@@ -565,10 +636,14 @@ fn append_to_acroform_fields(
                 .map_err(map_err)?;
             new_acro.dict_put("Fields", new_fields).map_err(map_err)?;
             let true_obj = mupdf::pdf::PdfObject::new_bool(true);
-            new_acro.dict_put("NeedAppearances", true_obj).map_err(map_err)?;
+            new_acro
+                .dict_put("NeedAppearances", true_obj)
+                .map_err(map_err)?;
             // Store the AcroForm dict as an indirect object and reference it.
             let acro_indirect = pdf_doc.add_object(&new_acro).map_err(map_err)?;
-            root_dict.dict_put("AcroForm", acro_indirect).map_err(map_err)?;
+            root_dict
+                .dict_put("AcroForm", acro_indirect)
+                .map_err(map_err)?;
         }
     }
 
@@ -606,19 +681,26 @@ fn append_to_page_annots(
 fn ensure_need_appearances(pdf_doc: &mut PdfDocument) -> Result<(), DocumentCoreError> {
     let trailer = pdf_doc.trailer().map_err(map_err)?;
     let root = trailer.get_dict("Root").map_err(map_err)?;
-    let Some(root) = root else { return Ok(()); };
+    let Some(root) = root else {
+        return Ok(());
+    };
     let resolved = root.resolve().map_err(map_err)?;
     let root_dict = resolved.unwrap_or(root);
     if let Some(acro) = root_dict.get_dict("AcroForm").map_err(map_err)? {
         let resolved_af = acro.resolve().map_err(map_err)?;
         let mut acro_dict = resolved_af.unwrap_or(acro);
         let true_obj = mupdf::pdf::PdfObject::new_bool(true);
-        acro_dict.dict_put("NeedAppearances", true_obj).map_err(map_err)?;
+        acro_dict
+            .dict_put("NeedAppearances", true_obj)
+            .map_err(map_err)?;
     }
     Ok(())
 }
 
-fn serialize_back(pdf_doc: &mut PdfDocument, doc: &mut OpenedDocument) -> Result<(), DocumentCoreError> {
+fn serialize_back(
+    pdf_doc: &mut PdfDocument,
+    doc: &mut OpenedDocument,
+) -> Result<(), DocumentCoreError> {
     let mut new_bytes: Vec<u8> = Vec::new();
     pdf_doc
         .write_to(&mut new_bytes)
@@ -640,7 +722,10 @@ mod tests {
     fn validate_field_name_rejects_reserved_chars() {
         for c in ['.', '/', '(', ')', '<', '>', '[', ']', '%', '#'] {
             let s = format!("name{c}");
-            assert!(validate_field_name(&s).is_err(), "expected {s:?} to be rejected");
+            assert!(
+                validate_field_name(&s).is_err(),
+                "expected {s:?} to be rejected"
+            );
         }
     }
 
@@ -699,9 +784,27 @@ mod tests {
     #[test]
     fn unique_name_increments_until_free() {
         let existing = vec![
-            FormField { name: "x".into(),   field_type: "text".into(), value: String::new(), page_index: 0, rect: [0.0;4] },
-            FormField { name: "x_2".into(), field_type: "text".into(), value: String::new(), page_index: 0, rect: [0.0;4] },
-            FormField { name: "x_3".into(), field_type: "text".into(), value: String::new(), page_index: 0, rect: [0.0;4] },
+            FormField {
+                name: "x".into(),
+                field_type: "text".into(),
+                value: String::new(),
+                page_index: 0,
+                rect: [0.0; 4],
+            },
+            FormField {
+                name: "x_2".into(),
+                field_type: "text".into(),
+                value: String::new(),
+                page_index: 0,
+                rect: [0.0; 4],
+            },
+            FormField {
+                name: "x_3".into(),
+                field_type: "text".into(),
+                value: String::new(),
+                page_index: 0,
+                rect: [0.0; 4],
+            },
         ];
         assert_eq!(unique_name("x", &existing), "x_4");
     }
@@ -709,10 +812,19 @@ mod tests {
     #[test]
     fn build_text_field_dict_contains_required_keys() {
         let req = CreateFormFieldRequest {
-            session_id: "s".into(), page_index: 0, field_type: CreateFieldType::Text,
-            name: "Foo".into(), value: Some("Bar".into()), default_value: None, options: None,
-            rect: [10.0, 20.0, 100.0, 50.0], required: Some(true), read_only: None,
-            font_size: Some(14.0), border_color: None, fill_color: None,
+            session_id: "s".into(),
+            page_index: 0,
+            field_type: CreateFieldType::Text,
+            name: "Foo".into(),
+            value: Some("Bar".into()),
+            default_value: None,
+            options: None,
+            rect: [10.0, 20.0, 100.0, 50.0],
+            required: Some(true),
+            read_only: None,
+            font_size: Some(14.0),
+            border_color: None,
+            fill_color: None,
         };
         let s = build_field_dict_str(&req, "Foo");
         assert!(s.contains("/FT /Tx"), "missing /FT /Tx in {s}");
@@ -725,10 +837,19 @@ mod tests {
     #[test]
     fn build_checkbox_field_handles_initial_value() {
         let mut req = CreateFormFieldRequest {
-            session_id: "s".into(), page_index: 0, field_type: CreateFieldType::Checkbox,
-            name: "Agree".into(), value: Some("Yes".into()), default_value: None, options: None,
-            rect: [10.0, 20.0, 30.0, 40.0], required: None, read_only: None,
-            font_size: None, border_color: None, fill_color: None,
+            session_id: "s".into(),
+            page_index: 0,
+            field_type: CreateFieldType::Checkbox,
+            name: "Agree".into(),
+            value: Some("Yes".into()),
+            default_value: None,
+            options: None,
+            rect: [10.0, 20.0, 30.0, 40.0],
+            required: None,
+            read_only: None,
+            font_size: None,
+            border_color: None,
+            fill_color: None,
         };
         let s_yes = build_field_dict_str(&req, "Agree");
         assert!(s_yes.contains("/V /Yes"), "{s_yes}");
@@ -742,10 +863,19 @@ mod tests {
     #[test]
     fn build_signature_field_dict() {
         let req = CreateFormFieldRequest {
-            session_id: "s".into(), page_index: 0, field_type: CreateFieldType::Signature,
-            name: "Sig1".into(), value: None, default_value: None, options: None,
-            rect: [100.0, 100.0, 300.0, 150.0], required: None, read_only: None,
-            font_size: None, border_color: None, fill_color: None,
+            session_id: "s".into(),
+            page_index: 0,
+            field_type: CreateFieldType::Signature,
+            name: "Sig1".into(),
+            value: None,
+            default_value: None,
+            options: None,
+            rect: [100.0, 100.0, 300.0, 150.0],
+            required: None,
+            read_only: None,
+            font_size: None,
+            border_color: None,
+            fill_color: None,
         };
         let s = build_field_dict_str(&req, "Sig1");
         assert!(s.contains("/FT /Sig"));
@@ -762,7 +892,11 @@ mod tests {
     fn create_and_round_trip_text_field() {
         // Build a tiny synthetic PDF using mupdf itself so we have valid bytes.
         let mut pdf = PdfDocument::new();
-        pdf.new_page(mupdf::Size { width: 612.0, height: 792.0 }).unwrap();
+        pdf.new_page(mupdf::Size {
+            width: 612.0,
+            height: 792.0,
+        })
+        .unwrap();
         let mut bytes = Vec::new();
         pdf.write_to(&mut bytes).unwrap();
 
@@ -773,10 +907,18 @@ mod tests {
             bytes,
             is_scanned: false,
             summary: crate::document_core::types::DocumentSummary {
-                page_count: 1, object_count: 0, title: None, author: None, producer: None,
+                page_count: 1,
+                object_count: 0,
+                title: None,
+                author: None,
+                producer: None,
             },
             pages: vec![crate::document_core::types::PageInfo {
-                index: 0, width_points: 612.0, height_points: 792.0, rotation: 0, has_text: false,
+                index: 0,
+                width_points: 612.0,
+                height_points: 792.0,
+                rotation: 0,
+                has_text: false,
             }],
             fonts: vec![],
             objects: vec![],
@@ -785,19 +927,29 @@ mod tests {
         };
 
         let req = CreateFormFieldRequest {
-            session_id: "s".into(), page_index: 0, field_type: CreateFieldType::Text,
-            name: "Greeting".into(), value: Some("Hello".into()),
-            default_value: None, options: None,
+            session_id: "s".into(),
+            page_index: 0,
+            field_type: CreateFieldType::Text,
+            name: "Greeting".into(),
+            value: Some("Hello".into()),
+            default_value: None,
+            options: None,
             rect: [50.0, 50.0, 250.0, 80.0],
-            required: None, read_only: None, font_size: Some(12.0),
-            border_color: None, fill_color: None,
+            required: None,
+            read_only: None,
+            font_size: Some(12.0),
+            border_color: None,
+            fill_color: None,
         };
 
         let before_len = doc.bytes.len();
         let (result, _) = create_form_field(&mut doc, &req, &[]).unwrap();
         assert!(result.success);
         assert_eq!(result.field_name, "Greeting");
-        assert!(doc.bytes.len() > before_len, "bytes should grow after field creation");
+        assert!(
+            doc.bytes.len() > before_len,
+            "bytes should grow after field creation"
+        );
 
         // Verify the AcroForm now contains the field.
         let pdf_doc = PdfDocument::from_bytes(&doc.bytes).unwrap();
@@ -807,31 +959,62 @@ mod tests {
     #[test]
     fn duplicate_field_name_is_auto_suffixed() {
         let mut pdf = PdfDocument::new();
-        pdf.new_page(mupdf::Size { width: 612.0, height: 792.0 }).unwrap();
+        pdf.new_page(mupdf::Size {
+            width: 612.0,
+            height: 792.0,
+        })
+        .unwrap();
         let mut bytes = Vec::new();
         pdf.write_to(&mut bytes).unwrap();
 
         let mut doc = OpenedDocument {
-            source_path: "t.pdf".into(), document_hash: crate::document_core::session::document_hash(&bytes), repaired: false, bytes, is_scanned: false,
+            source_path: "t.pdf".into(),
+            document_hash: crate::document_core::session::document_hash(&bytes),
+            repaired: false,
+            bytes,
+            is_scanned: false,
             summary: crate::document_core::types::DocumentSummary {
-                page_count: 1, object_count: 0, title: None, author: None, producer: None,
+                page_count: 1,
+                object_count: 0,
+                title: None,
+                author: None,
+                producer: None,
             },
             pages: vec![crate::document_core::types::PageInfo {
-                index: 0, width_points: 612.0, height_points: 792.0, rotation: 0, has_text: false,
+                index: 0,
+                width_points: 612.0,
+                height_points: 792.0,
+                rotation: 0,
+                has_text: false,
             }],
-            fonts: vec![], objects: vec![], recovery_report: None, parsed_document: None,
+            fonts: vec![],
+            objects: vec![],
+            recovery_report: None,
+            parsed_document: None,
         };
 
         let existing = vec![FormField {
-            name: "Foo".into(), field_type: "text".into(), value: String::new(),
-            page_index: 0, rect: [0.0; 4],
+            name: "Foo".into(),
+            field_type: "text".into(),
+            value: String::new(),
+            page_index: 0,
+            rect: [0.0; 4],
         }];
 
         let req = CreateFormFieldRequest {
-            session_id: "s".into(), page_index: 0, field_type: CreateFieldType::Text,
-            name: "Foo".into(), value: None, default_value: None, options: None,
-            rect: [10.0, 10.0, 100.0, 30.0], required: None, read_only: None,
-            font_size: None, border_color: None, fill_color: None,
+            session_id: "s".into(),
+            page_index: 0,
+            field_type: CreateFieldType::Text,
+            name: "Foo".into(),
+            value: None,
+            default_value: None,
+            options: None,
+            rect: [10.0, 10.0, 100.0, 30.0],
+            required: None,
+            read_only: None,
+            font_size: None,
+            border_color: None,
+            fill_color: None,
         };
 
         let (result, name) = create_form_field(&mut doc, &req, &existing).unwrap();
@@ -843,21 +1026,44 @@ mod tests {
     #[test]
     fn invalid_rect_rejected_by_create() {
         let mut doc = OpenedDocument {
-            source_path: "t.pdf".into(), document_hash: crate::document_core::session::document_hash(&[0xFF]), repaired: false, bytes: vec![0xFF], is_scanned: false,
+            source_path: "t.pdf".into(),
+            document_hash: crate::document_core::session::document_hash(&[0xFF]),
+            repaired: false,
+            bytes: vec![0xFF],
+            is_scanned: false,
             summary: crate::document_core::types::DocumentSummary {
-                page_count: 1, object_count: 0, title: None, author: None, producer: None,
+                page_count: 1,
+                object_count: 0,
+                title: None,
+                author: None,
+                producer: None,
             },
             pages: vec![crate::document_core::types::PageInfo {
-                index: 0, width_points: 612.0, height_points: 792.0, rotation: 0, has_text: false,
+                index: 0,
+                width_points: 612.0,
+                height_points: 792.0,
+                rotation: 0,
+                has_text: false,
             }],
-            fonts: vec![], objects: vec![], recovery_report: None, parsed_document: None,
+            fonts: vec![],
+            objects: vec![],
+            recovery_report: None,
+            parsed_document: None,
         };
         let req = CreateFormFieldRequest {
-            session_id: "s".into(), page_index: 0, field_type: CreateFieldType::Text,
-            name: "Foo".into(), value: None, default_value: None, options: None,
+            session_id: "s".into(),
+            page_index: 0,
+            field_type: CreateFieldType::Text,
+            name: "Foo".into(),
+            value: None,
+            default_value: None,
+            options: None,
             rect: [100.0, 100.0, 50.0, 50.0], // inverted
-            required: None, read_only: None,
-            font_size: None, border_color: None, fill_color: None,
+            required: None,
+            read_only: None,
+            font_size: None,
+            border_color: None,
+            fill_color: None,
         };
         let err = create_form_field(&mut doc, &req, &[]).err().unwrap();
         assert!(format!("{err}").contains("rect"));

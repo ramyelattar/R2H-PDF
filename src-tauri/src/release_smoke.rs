@@ -171,6 +171,7 @@ pub fn run_workflow(workflow: &str) -> Result<(), String> {
         "ocr" => run_release_smoke_ocr(),
         "rag-ask-pdf" => run_release_smoke_rag_ask_pdf(),
         "compare" => run_release_smoke_compare(),
+        "documentengine-live" => run_document_engine_live_smoke(),
         "all" => {
             run_release_smoke_render()?;
             run_release_smoke_text_edit_export()?;
@@ -734,7 +735,10 @@ fn run_document_engine_live_smoke() -> Result<(), String> {
                 rendered.width_px, rendered.height_px
             ),
             format!("- Extracted text chars: {}", joined.len()),
-            format!("- Extracted text preview: {:?}", joined.chars().take(80).collect::<String>()),
+            format!(
+                "- Extracted text preview: {:?}",
+                joined.chars().take(80).collect::<String>()
+            ),
             format!("- Close session: {session_id}"),
             format!("- Reopen page count: {pages2}"),
             format!(
@@ -751,39 +755,49 @@ fn run_document_engine_live_smoke() -> Result<(), String> {
 mod tests {
     use super::*;
 
+    // Every smoke workflow passes through license-gated feature checks, so
+    // each test must own the license test environment (serialized with the
+    // license unit tests) while it runs.
     #[test]
     fn release_smoke_render() -> Result<(), String> {
+        let _license = crate::license::test_support::LicenseTestEnv::new("smoke-render");
         run_release_smoke_render()
     }
 
     #[test]
     fn document_engine_live_smoke() -> Result<(), String> {
+        let _license = crate::license::test_support::LicenseTestEnv::new("smoke-docengine");
         run_document_engine_live_smoke()
     }
 
     #[test]
     fn release_smoke_text_edit_export() -> Result<(), String> {
+        let _license = crate::license::test_support::LicenseTestEnv::new("smoke-textedit");
         run_release_smoke_text_edit_export()
     }
 
     #[test]
     fn release_smoke_image_edit_export() -> Result<(), String> {
+        let _license = crate::license::test_support::LicenseTestEnv::new("smoke-imageedit");
         run_release_smoke_image_edit_export()
     }
 
     #[test]
     fn release_smoke_rag_ask_pdf() -> Result<(), String> {
+        let _license = crate::license::test_support::LicenseTestEnv::new("smoke-rag");
         run_release_smoke_rag_ask_pdf()
     }
 
     #[test]
     fn release_smoke_compare() -> Result<(), String> {
+        let _license = crate::license::test_support::LicenseTestEnv::new("smoke-compare");
         run_release_smoke_compare()
     }
 
     #[test]
     #[ignore = "release OCR smoke is an explicit release gate; run via scripts/smoke-ocr.ps1"]
     fn release_smoke_ocr() -> Result<(), String> {
+        let _license = crate::license::test_support::LicenseTestEnv::new("smoke-ocr");
         run_release_smoke_ocr()
     }
 }

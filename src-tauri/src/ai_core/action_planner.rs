@@ -21,7 +21,9 @@ pub struct ActionPlanner {
 
 impl ActionPlanner {
     pub fn new() -> Self {
-        Self { batches: HashMap::new() }
+        Self {
+            batches: HashMap::new(),
+        }
     }
 
     /// Plan actions based on user request + RAG context.
@@ -39,9 +41,18 @@ impl ActionPlanner {
         // 1. Retrieve relevant context via RAG.
         let top_k = request.top_k.unwrap_or(5);
         let query_embedding = embedding_runtime.and_then(|emb| {
-            if emb.is_server_ready() { emb.embed_query(&request.user_request).ok() } else { None }
+            if emb.is_server_ready() {
+                emb.embed_query(&request.user_request).ok()
+            } else {
+                None
+            }
         });
-        let results = rag_engine.search(&request.session_id, &request.user_request, top_k, query_embedding.as_deref());
+        let results = rag_engine.search(
+            &request.session_id,
+            &request.user_request,
+            top_k,
+            query_embedding.as_deref(),
+        );
 
         if results.is_empty() {
             let batch = AiActionBatch {
@@ -50,7 +61,10 @@ impl ActionPlanner {
                 user_request: request.user_request.clone(),
                 actions: Vec::new(),
                 citations: Vec::new(),
-                warnings: vec!["No relevant document content found. Cannot propose actions without evidence.".to_string()],
+                warnings: vec![
+                    "No relevant document content found. Cannot propose actions without evidence."
+                        .to_string(),
+                ],
                 created_at: epoch_ms(),
             };
             self.batches.insert(batch.batch_id.clone(), batch.clone());
@@ -58,21 +72,32 @@ impl ActionPlanner {
         }
 
         // 2. Build citations from retrieved chunks.
-        let citations: Vec<Citation> = results.iter().enumerate().map(|(i, r)| Citation {
-            citation_id: format!("cite-{}", i + 1),
-            page_index: r.page_index,
-            chunk_id: r.chunk_id.clone(),
-            snippet: r.text.chars().take(200).collect(),
-            score: r.score,
-            source: r.source.clone(),
-        }).collect();
+        let citations: Vec<Citation> = results
+            .iter()
+            .enumerate()
+            .map(|(i, r)| Citation {
+                citation_id: format!("cite-{}", i + 1),
+                page_index: r.page_index,
+                chunk_id: r.chunk_id.clone(),
+                snippet: r.text.chars().take(200).collect(),
+                score: r.score,
+                source: r.source.clone(),
+            })
+            .collect();
 
         // 3. Build prompt for action planning.
         let context = build_context(&results);
-        let prompt = build_action_prompt(&request.user_request, &context, &citations, request.page_count);
+        let prompt = build_action_prompt(
+            &request.user_request,
+            &context,
+            &citations,
+            request.page_count,
+        );
 
         // 4. Generate with local LLM.
-        let default_model = runtime.registry.default_model()
+        let default_model = runtime
+            .registry
+            .default_model()
             .ok_or_else(|| "No default LLM model configured".to_string())?;
 
         let gen_request = LocalGenerateRequest {
@@ -100,8 +125,15 @@ impl ActionPlanner {
                             if errors.is_empty() {
                                 valid_actions.push(action);
                             } else {
-                                let err_msgs: Vec<String> = errors.iter().map(|e| format!("{}: {}", e.field, e.message)).collect();
-                                warnings.push(format!("Action {} rejected: {}", i, err_msgs.join(", ")));
+                                let err_msgs: Vec<String> = errors
+                                    .iter()
+                                    .map(|e| format!("{}: {}", e.field, e.message))
+                                    .collect();
+                                warnings.push(format!(
+                                    "Action {} rejected: {}",
+                                    i,
+                                    err_msgs.join(", ")
+                                ));
                             }
                         }
                         Err(e) => {
@@ -135,21 +167,33 @@ impl ActionPlanner {
 
     pub fn accept_action(&mut self, batch_id: &str, action_id: &str) -> Result<(), String> {
         let batch = self.batches.get_mut(batch_id).ok_or("Batch not found")?;
-        let action = batch.actions.iter_mut().find(|a| a.action_id == action_id).ok_or("Action not found")?;
+        let action = batch
+            .actions
+            .iter_mut()
+            .find(|a| a.action_id == action_id)
+            .ok_or("Action not found")?;
         action.status = AiActionStatus::Accepted;
         Ok(())
     }
 
     pub fn reject_action(&mut self, batch_id: &str, action_id: &str) -> Result<(), String> {
         let batch = self.batches.get_mut(batch_id).ok_or("Batch not found")?;
-        let action = batch.actions.iter_mut().find(|a| a.action_id == action_id).ok_or("Action not found")?;
+        let action = batch
+            .actions
+            .iter_mut()
+            .find(|a| a.action_id == action_id)
+            .ok_or("Action not found")?;
         action.status = AiActionStatus::Rejected;
         Ok(())
     }
 
     pub fn mark_applied(&mut self, batch_id: &str, action_id: &str) -> Result<(), String> {
         let batch = self.batches.get_mut(batch_id).ok_or("Batch not found")?;
-        let action = batch.actions.iter_mut().find(|a| a.action_id == action_id).ok_or("Action not found")?;
+        let action = batch
+            .actions
+            .iter_mut()
+            .find(|a| a.action_id == action_id)
+            .ok_or("Action not found")?;
         action.status = AiActionStatus::Applied;
         Ok(())
     }
@@ -184,7 +228,12 @@ fn build_context(results: &[VectorSearchResult]) -> String {
     ctx
 }
 
-fn build_action_prompt(user_request: &str, context: &str, citations: &[Citation], page_count: usize) -> String {
+fn build_action_prompt(
+    user_request: &str,
+    context: &str,
+    citations: &[Citation],
+    page_count: usize,
+) -> String {
     format!(
         "Document context (pages 1-{}):\n---\n{}\n---\n\n\
          User request: {}\n\n\
@@ -200,10 +249,11 @@ fn build_action_prompt(user_request: &str, context: &str, citations: &[Citation]
 
 fn parse_llm_actions(output: &str) -> Result<Vec<RawLlmAction>, String> {
     // Try to find JSON in the output (LLM may include extra text).
-    let json_str = extract_json(output).ok_or_else(|| "No JSON object found in LLM output".to_string())?;
+    let json_str =
+        extract_json(output).ok_or_else(|| "No JSON object found in LLM output".to_string())?;
 
-    let parsed: RawLlmResponse = serde_json::from_str(json_str)
-        .map_err(|e| format!("JSON parse error: {e}"))?;
+    let parsed: RawLlmResponse =
+        serde_json::from_str(json_str).map_err(|e| format!("JSON parse error: {e}"))?;
 
     Ok(parsed.actions.unwrap_or_default())
 }
@@ -245,7 +295,8 @@ fn convert_raw_action(
     };
 
     // Find citations for this page.
-    let page_citations: Vec<Citation> = citations.iter()
+    let page_citations: Vec<Citation> = citations
+        .iter()
         .filter(|c| c.page_index == page_index)
         .cloned()
         .collect();
@@ -281,7 +332,10 @@ fn gen_id(prefix: &str) -> String {
 }
 
 fn epoch_ms() -> u128 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or_default()
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or_default()
 }
 
 fn rand_suffix() -> String {
@@ -302,7 +356,9 @@ pub struct ActionPlannerState {
 
 impl ActionPlannerState {
     pub fn new() -> Self {
-        Self { planner: Mutex::new(ActionPlanner::new()) }
+        Self {
+            planner: Mutex::new(ActionPlanner::new()),
+        }
     }
 }
 
@@ -343,8 +399,15 @@ mod tests {
         let raw = RawLlmAction {
             action_type: Some("delete_everything".to_string()),
             page_index: Some(0),
-            rect: Some(RawRect { x: Some(0.0), y: Some(0.0), width: Some(100.0), height: Some(20.0) }),
-            text: None, reason: None, confidence: Some(0.5),
+            rect: Some(RawRect {
+                x: Some(0.0),
+                y: Some(0.0),
+                width: Some(100.0),
+                height: Some(20.0),
+            }),
+            text: None,
+            reason: None,
+            confidence: Some(0.5),
         };
         let result = convert_raw_action(&raw, "s1", &[], 0);
         assert!(result.is_err());
@@ -371,7 +434,12 @@ mod tests {
                 action_type: AiActionType::AddComment,
                 session_id: "s1".to_string(),
                 page_index: 0,
-                rect: AiActionRect { x: 72.0, y: 700.0, width: 200.0, height: 30.0 },
+                rect: AiActionRect {
+                    x: 72.0,
+                    y: 700.0,
+                    width: 200.0,
+                    height: 30.0,
+                },
                 text: "Test".to_string(),
                 reason: "Test reason".to_string(),
                 confidence: 0.8,
@@ -386,9 +454,15 @@ mod tests {
         planner.batches.insert("b1".to_string(), batch);
 
         planner.accept_action("b1", "a1").unwrap();
-        assert!(matches!(planner.batches["b1"].actions[0].status, AiActionStatus::Accepted));
+        assert!(matches!(
+            planner.batches["b1"].actions[0].status,
+            AiActionStatus::Accepted
+        ));
 
         planner.reject_action("b1", "a1").unwrap();
-        assert!(matches!(planner.batches["b1"].actions[0].status, AiActionStatus::Rejected));
+        assert!(matches!(
+            planner.batches["b1"].actions[0].status,
+            AiActionStatus::Rejected
+        ));
     }
 }

@@ -6,7 +6,9 @@ use super::types::{BenchmarkResultInput, MemorySnapshotInput};
 #[test]
 fn benchmark_plan_contains_large_file_open_target() {
     let scenarios = default_scenarios();
-    let open = scenarios.iter().find(|scenario| scenario.id == "open_300_cold");
+    let open = scenarios
+        .iter()
+        .find(|scenario| scenario.id == "open_300_cold");
     assert!(open.is_some());
 
     let open = open.unwrap();

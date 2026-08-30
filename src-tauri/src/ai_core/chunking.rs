@@ -61,7 +61,9 @@ pub fn chunk_page_text(
         while start < text_len && !normalized.is_char_boundary(start) {
             start += 1;
         }
-        if start >= text_len { break; }
+        if start >= text_len {
+            break;
+        }
 
         let mut end = (start + max_chars).min(text_len);
         // Ensure end is on a char boundary.
@@ -161,22 +163,44 @@ mod tests {
 
     #[test]
     fn chunk_preserves_page_index() {
-        let chunks = chunk_page_text("s1", 3, "Hello world this is a test.", "native_text", &ChunkingOptions::default());
+        let chunks = chunk_page_text(
+            "s1",
+            3,
+            "Hello world this is a test.",
+            "native_text",
+            &ChunkingOptions::default(),
+        );
         assert!(!chunks.is_empty());
         assert!(chunks.iter().all(|c| c.page_index == 3));
     }
 
     #[test]
     fn chunk_skips_empty_text() {
-        let chunks = chunk_page_text("s1", 0, "   \n  \n  ", "native_text", &ChunkingOptions::default());
+        let chunks = chunk_page_text(
+            "s1",
+            0,
+            "   \n  \n  ",
+            "native_text",
+            &ChunkingOptions::default(),
+        );
         assert!(chunks.is_empty());
     }
 
     #[test]
     fn chunk_handles_arabic_english() {
         let text = "This is English text. هذا نص عربي للاختبار. More English follows.";
-        let chunks = chunk_page_text("s1", 0, text, "native_text", &ChunkingOptions { max_chars: 80, overlap_chars: 10, ..Default::default() });
-        assert!(chunks.len() >= 1);
+        let chunks = chunk_page_text(
+            "s1",
+            0,
+            text,
+            "native_text",
+            &ChunkingOptions {
+                max_chars: 80,
+                overlap_chars: 10,
+                ..Default::default()
+            },
+        );
+        assert!(!chunks.is_empty());
         // All chunks should have valid text.
         for chunk in &chunks {
             assert!(!chunk.text.is_empty());
@@ -186,7 +210,11 @@ mod tests {
     #[test]
     fn chunk_respects_max_chars() {
         let text = "a ".repeat(1000); // 2000 chars
-        let opts = ChunkingOptions { max_chars: 200, overlap_chars: 20, ..Default::default() };
+        let opts = ChunkingOptions {
+            max_chars: 200,
+            overlap_chars: 20,
+            ..Default::default()
+        };
         let chunks = chunk_page_text("s1", 0, &text, "native_text", &opts);
         for chunk in &chunks {
             assert!(chunk.text.len() <= 210); // slight tolerance for line-break search

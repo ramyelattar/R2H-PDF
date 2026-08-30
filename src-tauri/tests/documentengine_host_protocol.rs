@@ -514,13 +514,20 @@ fn real_host_native_vector_read_preserves_geometry_metadata_and_order() {
     assert_eq!(result["pageGeometry"]["widthPt"], 300.0);
     assert_eq!(result["pageGeometry"]["heightPt"], 200.0);
     assert_eq!(result["pageGeometry"]["rotation"], 0);
-    assert_eq!(result["profile"]["profileId"], "documentengine-native-vector-read-v1");
+    assert_eq!(
+        result["profile"]["profileId"],
+        "documentengine-native-vector-read-v1"
+    );
     assert_eq!(result["engineIdentity"]["product"], "R2H-PDF");
-    assert!(!result.to_string().contains(fixture.to_string_lossy().as_ref()));
+    assert!(!result
+        .to_string()
+        .contains(fixture.to_string_lossy().as_ref()));
     assert!(!result.to_string().to_ascii_lowercase().contains("pid"));
     assert!(!result.to_string().to_ascii_lowercase().contains("session"));
 
-    let paths = result["paths"].as_array().expect("paths should be an array");
+    let paths = result["paths"]
+        .as_array()
+        .expect("paths should be an array");
     assert!(!paths.is_empty(), "native vector fixture should have paths");
     println!(
         "E6B1_OBSERVED native_fixture_paths={} response_bytes={}",
@@ -592,7 +599,10 @@ fn native_vector_read_allows_empty_native_path_pages() {
     ));
     host.finish();
 
-    assert!(vector.get("error").is_none(), "empty vector read failed: {vector}");
+    assert!(
+        vector.get("error").is_none(),
+        "empty vector read failed: {vector}"
+    );
     assert!(vector["result"]["paths"].is_array());
     println!(
         "E6B1_OBSERVED existing_text_fixture_paths={} response_bytes={}",
@@ -681,7 +691,10 @@ fn native_vector_read_reports_page_rotation_without_display_coordinates() {
                 "profileVersion": "documentengine-native-vector-read-v1"
             }),
         ));
-        assert!(vector.get("error").is_none(), "rotation {rotation} failed: {vector}");
+        assert!(
+            vector.get("error").is_none(),
+            "rotation {rotation} failed: {vector}"
+        );
         assert_eq!(vector["result"]["coordinateSpace"], "PDF_PAGE");
         assert_eq!(vector["result"]["pageGeometry"]["rotation"], rotation);
         let close = host.request(&request(

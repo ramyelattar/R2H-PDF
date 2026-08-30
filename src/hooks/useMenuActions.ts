@@ -139,7 +139,7 @@ export function useMenuActions(deps: UseMenuActionsDeps) {
     }
     d.appendDiagnostic({ level: "INFO", source: "ui", message: `Executed command: ${command.title}` });
     d.setCommandPaletteOpen(false);
-  }, [handleCloseDocument, handleExport]);
+  }, [handleCloseDocument]);
 
   return {
     handleCloseDocument,

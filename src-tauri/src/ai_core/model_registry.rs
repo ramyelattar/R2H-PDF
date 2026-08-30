@@ -13,7 +13,10 @@ pub struct ModelRegistry {
 impl ModelRegistry {
     pub fn new() -> Self {
         let workspace_root = find_workspace_root();
-        let mut registry = Self { workspace_root, config: None };
+        let mut registry = Self {
+            workspace_root,
+            config: None,
+        };
         registry.reload();
         registry
     }
@@ -29,30 +32,34 @@ impl ModelRegistry {
             return Vec::new();
         };
 
-        config.models.iter().map(|m| {
-            let resolved_path = self.resolve_model_path(&m.path);
-            let (exists, size_bytes) = if resolved_path.is_file() {
-                let size = std::fs::metadata(&resolved_path)
-                    .map(|meta| meta.len())
-                    .unwrap_or(0);
-                (true, size)
-            } else {
-                (false, 0)
-            };
+        config
+            .models
+            .iter()
+            .map(|m| {
+                let resolved_path = self.resolve_model_path(&m.path);
+                let (exists, size_bytes) = if resolved_path.is_file() {
+                    let size = std::fs::metadata(&resolved_path)
+                        .map(|meta| meta.len())
+                        .unwrap_or(0);
+                    (true, size)
+                } else {
+                    (false, 0)
+                };
 
-            LocalModelInfo {
-                id: m.id.clone(),
-                name: m.name.clone(),
-                model_type: m.model_type.clone(),
-                format: m.format.clone(),
-                path: resolved_path.to_string_lossy().to_string(),
-                runtime: m.runtime.clone(),
-                exists,
-                size_bytes,
-                default: m.default,
-                context_window: m.context_window,
-            }
-        }).collect()
+                LocalModelInfo {
+                    id: m.id.clone(),
+                    name: m.name.clone(),
+                    model_type: m.model_type.clone(),
+                    format: m.format.clone(),
+                    path: resolved_path.to_string_lossy().to_string(),
+                    runtime: m.runtime.clone(),
+                    exists,
+                    size_bytes,
+                    default: m.default,
+                    context_window: m.context_window,
+                }
+            })
+            .collect()
     }
 
     /// Get the default model info.
@@ -67,7 +74,8 @@ impl ModelRegistry {
 
     /// Validate a specific model exists and is accessible.
     pub fn validate_model(&self, model_id: &str) -> Result<LocalModelInfo, String> {
-        let model = self.get_model(model_id)
+        let model = self
+            .get_model(model_id)
             .ok_or_else(|| format!("Model '{}' not found in registry", model_id))?;
         if !model.exists {
             return Err(format!("Model file not found: {}", model.path));

@@ -15,6 +15,12 @@ pub struct RenderPipeline {
     pub cache_misses: Cell<usize>,
 }
 
+impl Default for RenderPipeline {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RenderPipeline {
     pub fn new() -> Self {
         Self {
@@ -114,8 +120,10 @@ impl RenderPipeline {
         let start = Instant::now();
         self.cache_misses.set(self.cache_misses.get() + 1);
         let page = parsed_doc
-            .load_page(i32::try_from(request.page_index)
-                .map_err(|e| DocumentCoreError::RenderError(e.to_string()))?)
+            .load_page(
+                i32::try_from(request.page_index)
+                    .map_err(|e| DocumentCoreError::RenderError(e.to_string()))?,
+            )
             .map_err(|e| DocumentCoreError::RenderError(e.to_string()))?;
 
         let page_bounds = page
@@ -217,7 +225,9 @@ impl RenderPipeline {
     }
 
     pub fn invalidate_page_cache(&self, session_id: &str, page_index: usize) {
-        self.cache.borrow_mut().invalidate_page(session_id, page_index);
+        self.cache
+            .borrow_mut()
+            .invalidate_page(session_id, page_index);
     }
 
     fn build_key(

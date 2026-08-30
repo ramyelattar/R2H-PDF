@@ -26,7 +26,7 @@ pub struct IndexStatus {
     pub embedding_model_id: String,
     pub built_at: Option<u128>,
     pub include_ocr: bool,
-    pub status: String, // "empty" | "building" | "ready" | "failed"
+    pub status: String,         // "empty" | "building" | "ready" | "failed"
     pub retrieval_mode: String, // "bm25" | "dense" | "hybrid"
     pub dense_embedding_available: bool,
     pub fallback_reason: Option<String>,
@@ -126,7 +126,13 @@ impl DocumentIndex {
     }
 
     /// Hybrid search: combine dense cosine + BM25 results.
-    pub fn search_hybrid(&self, query: &str, query_embedding: Option<&[f32]>, top_k: usize, min_score: f32) -> Vec<VectorSearchResult> {
+    pub fn search_hybrid(
+        &self,
+        query: &str,
+        query_embedding: Option<&[f32]>,
+        top_k: usize,
+        min_score: f32,
+    ) -> Vec<VectorSearchResult> {
         let bm25_results = self.search_bm25(query, top_k * 2, min_score);
 
         let dense_results = if self.dense_available {
@@ -147,35 +153,53 @@ impl DocumentIndex {
         }
 
         // Merge: normalize scores and combine.
-        let bm25_max = bm25_results.first().map(|r| r.score).unwrap_or(1.0).max(0.001);
-        let dense_max = dense_results.first().map(|r| r.score).unwrap_or(1.0).max(0.001);
+        let bm25_max = bm25_results
+            .first()
+            .map(|r| r.score)
+            .unwrap_or(1.0)
+            .max(0.001);
+        let dense_max = dense_results
+            .first()
+            .map(|r| r.score)
+            .unwrap_or(1.0)
+            .max(0.001);
 
         let mut combined: HashMap<String, VectorSearchResult> = HashMap::new();
 
         for r in &bm25_results {
             let norm_score = r.score / bm25_max * 0.4; // BM25 weight: 40%
-            combined.entry(r.chunk_id.clone()).or_insert_with(|| VectorSearchResult {
-                chunk_id: r.chunk_id.clone(),
-                page_index: r.page_index,
-                text: r.text.clone(),
-                score: 0.0,
-                source: r.source.clone(),
-            }).score += norm_score;
+            combined
+                .entry(r.chunk_id.clone())
+                .or_insert_with(|| VectorSearchResult {
+                    chunk_id: r.chunk_id.clone(),
+                    page_index: r.page_index,
+                    text: r.text.clone(),
+                    score: 0.0,
+                    source: r.source.clone(),
+                })
+                .score += norm_score;
         }
 
         for r in &dense_results {
             let norm_score = r.score / dense_max * 0.6; // Dense weight: 60%
-            combined.entry(r.chunk_id.clone()).or_insert_with(|| VectorSearchResult {
-                chunk_id: r.chunk_id.clone(),
-                page_index: r.page_index,
-                text: r.text.clone(),
-                score: 0.0,
-                source: r.source.clone(),
-            }).score += norm_score;
+            combined
+                .entry(r.chunk_id.clone())
+                .or_insert_with(|| VectorSearchResult {
+                    chunk_id: r.chunk_id.clone(),
+                    page_index: r.page_index,
+                    text: r.text.clone(),
+                    score: 0.0,
+                    source: r.source.clone(),
+                })
+                .score += norm_score;
         }
 
         let mut results: Vec<VectorSearchResult> = combined.into_values().collect();
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         results.truncate(top_k);
         results
     }
@@ -209,16 +233,19 @@ impl DocumentIndex {
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(top_k);
 
-        scores.into_iter().map(|(idx, score)| {
-            let chunk = &self.chunks[idx];
-            VectorSearchResult {
-                chunk_id: chunk.chunk_id.clone(),
-                page_index: chunk.page_index,
-                text: chunk.text.clone(),
-                score,
-                source: chunk.source.clone(),
-            }
-        }).collect()
+        scores
+            .into_iter()
+            .map(|(idx, score)| {
+                let chunk = &self.chunks[idx];
+                VectorSearchResult {
+                    chunk_id: chunk.chunk_id.clone(),
+                    page_index: chunk.page_index,
+                    text: chunk.text.clone(),
+                    score,
+                    source: chunk.source.clone(),
+                }
+            })
+            .collect()
     }
 
     /// Dense cosine similarity search.
@@ -227,24 +254,35 @@ impl DocumentIndex {
             return Vec::new();
         }
 
-        let mut scores: Vec<(usize, f32)> = self.dense_vectors.iter().enumerate()
-            .map(|(idx, vec)| (idx, crate::ai_core::embedding::cosine_similarity(query_embedding, vec)))
+        let mut scores: Vec<(usize, f32)> = self
+            .dense_vectors
+            .iter()
+            .enumerate()
+            .map(|(idx, vec)| {
+                (
+                    idx,
+                    crate::ai_core::embedding::cosine_similarity(query_embedding, vec),
+                )
+            })
             .filter(|(_, score)| *score > 0.0)
             .collect();
 
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(top_k);
 
-        scores.into_iter().map(|(idx, score)| {
-            let chunk = &self.chunks[idx];
-            VectorSearchResult {
-                chunk_id: chunk.chunk_id.clone(),
-                page_index: chunk.page_index,
-                text: chunk.text.clone(),
-                score,
-                source: chunk.source.clone(),
-            }
-        }).collect()
+        scores
+            .into_iter()
+            .map(|(idx, score)| {
+                let chunk = &self.chunks[idx];
+                VectorSearchResult {
+                    chunk_id: chunk.chunk_id.clone(),
+                    page_index: chunk.page_index,
+                    text: chunk.text.clone(),
+                    score,
+                    source: chunk.source.clone(),
+                }
+            })
+            .collect()
     }
 
     pub fn clear(&mut self) {
@@ -336,9 +374,21 @@ mod tests {
     fn index_search_ranks_relevant_higher() {
         let mut index = DocumentIndex::new("s1");
         let chunks = vec![
-            make_chunk("c1", 0, "The electrical load schedule shows 500kW total connected load."),
-            make_chunk("c2", 1, "The architectural drawings show floor plans and elevations."),
-            make_chunk("c3", 2, "Cable sizing for the main distribution board requires 500A breaker."),
+            make_chunk(
+                "c1",
+                0,
+                "The electrical load schedule shows 500kW total connected load.",
+            ),
+            make_chunk(
+                "c2",
+                1,
+                "The architectural drawings show floor plans and elevations.",
+            ),
+            make_chunk(
+                "c3",
+                2,
+                "Cable sizing for the main distribution board requires 500A breaker.",
+            ),
         ];
         index.build(chunks, false);
 
@@ -352,7 +402,10 @@ mod tests {
         let mut index = DocumentIndex::new("s1");
         assert_eq!(index.status().status, "empty");
 
-        index.build(vec![make_chunk("c1", 0, "Hello world test document")], false);
+        index.build(
+            vec![make_chunk("c1", 0, "Hello world test document")],
+            false,
+        );
         assert_eq!(index.status().status, "ready");
         assert_eq!(index.status().chunk_count, 1);
 

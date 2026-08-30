@@ -18,7 +18,7 @@ fn load_test_pdf() -> Vec<u8> {
         .join("tests")
         .join("files")
         .join("dummy.pdf");
-    std::fs::read(&path).expect(&format!("Failed to read test PDF at {:?}", path))
+    std::fs::read(&path).unwrap_or_else(|_| panic!("Failed to read test PDF at {:?}", path))
 }
 
 /// Extract text from a PDF's first page using MuPDF.
@@ -183,7 +183,7 @@ fn test_safe_visual_replacement_produces_visible_text() {
     // Simulate the safe visual replacement path:
     // 1. Redact original area
     // 2. Append new text operators with Helvetica
-    let mut doc = mupdf::pdf::PdfDocument::from_bytes(&original_bytes).expect("open");
+    let doc = mupdf::pdf::PdfDocument::from_bytes(&original_bytes).expect("open");
     let page = doc.load_page(0).expect("load page");
     let mut pdf_page = mupdf::pdf::PdfPage::try_from(page).expect("pdf page");
 

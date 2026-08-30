@@ -30,20 +30,44 @@ pub fn generate_html_report(bundle: &ReportBundle, request: &ReportExportRequest
 
     // Summary
     if request.include_review && !bundle.review_summary.is_empty() {
-        html.push_str(&format!(r#"<h2>Executive Summary</h2><p>{}</p>"#, escape_html(&bundle.review_summary)));
+        html.push_str(&format!(
+            r#"<h2>Executive Summary</h2><p>{}</p>"#,
+            escape_html(&bundle.review_summary)
+        ));
     }
 
     // Findings Overview
-    let total = bundle.findings.len() + bundle.risks.len() + bundle.missing_information.len() + bundle.engineering_findings.len();
+    let total = bundle.findings.len()
+        + bundle.risks.len()
+        + bundle.missing_information.len()
+        + bundle.engineering_findings.len();
     if total > 0 {
-        html.push_str(&format!(r#"<h2>Findings Overview</h2><p>Total: {} findings</p><ul>"#, total));
-        let counts = count_severities(&bundle.findings, &bundle.risks, &bundle.missing_information, &bundle.engineering_findings);
-        for (sev, count) in &counts { html.push_str(&format!("<li><span class=\"badge badge-{}\">{}</span>: {}</li>", sev, sev, count)); }
+        html.push_str(&format!(
+            r#"<h2>Findings Overview</h2><p>Total: {} findings</p><ul>"#,
+            total
+        ));
+        let counts = count_severities(
+            &bundle.findings,
+            &bundle.risks,
+            &bundle.missing_information,
+            &bundle.engineering_findings,
+        );
+        for (sev, count) in &counts {
+            html.push_str(&format!(
+                "<li><span class=\"badge badge-{}\">{}</span>: {}</li>",
+                sev, sev, count
+            ));
+        }
         html.push_str("</ul>");
     }
 
     // Findings table
-    let all_findings: Vec<&ReportFinding> = bundle.findings.iter().chain(&bundle.risks).chain(&bundle.missing_information).collect();
+    let all_findings: Vec<&ReportFinding> = bundle
+        .findings
+        .iter()
+        .chain(&bundle.risks)
+        .chain(&bundle.missing_information)
+        .collect();
     if !all_findings.is_empty() && request.include_review {
         html.push_str(r#"<h2>Review Findings</h2><table class="findings-table"><thead><tr><th>Severity</th><th>Category</th><th>Title</th><th>Description</th><th>Pages</th><th>Recommendation</th></tr></thead><tbody>"#);
         for f in &all_findings {
@@ -75,10 +99,23 @@ pub fn generate_html_report(bundle: &ReportBundle, request: &ReportExportRequest
     if request.include_calculation_traces && !bundle.calculation_traces.is_empty() {
         html.push_str("<h2>Calculation Traces</h2>");
         for t in &bundle.calculation_traces {
-            html.push_str(&format!(r#"<div class="trace-block"><h4>{}</h4><p class="formula">{}</p><ul>"#, escape_html(&t.title), escape_html(&t.formula)));
-            for inp in &t.inputs { html.push_str(&format!("<li>{}</li>", escape_html(inp))); }
-            html.push_str(&format!("</ul><p class=\"result\">Result: {}</p>", escape_html(&t.final_value)));
-            if !t.warnings.is_empty() { for w in &t.warnings { html.push_str(&format!("<p class=\"warning\">⚠ {}</p>", escape_html(w))); } }
+            html.push_str(&format!(
+                r#"<div class="trace-block"><h4>{}</h4><p class="formula">{}</p><ul>"#,
+                escape_html(&t.title),
+                escape_html(&t.formula)
+            ));
+            for inp in &t.inputs {
+                html.push_str(&format!("<li>{}</li>", escape_html(inp)));
+            }
+            html.push_str(&format!(
+                "</ul><p class=\"result\">Result: {}</p>",
+                escape_html(&t.final_value)
+            ));
+            if !t.warnings.is_empty() {
+                for w in &t.warnings {
+                    html.push_str(&format!("<p class=\"warning\">⚠ {}</p>", escape_html(w)));
+                }
+            }
             html.push_str("</div>");
         }
     }
@@ -87,9 +124,13 @@ pub fn generate_html_report(bundle: &ReportBundle, request: &ReportExportRequest
     if request.include_ai_actions && !bundle.ai_actions.is_empty() {
         html.push_str("<h2>AI Suggested Actions</h2><table class=\"actions-table\"><thead><tr><th>Type</th><th>Page</th><th>Text</th><th>Status</th><th>Confidence</th></tr></thead><tbody>");
         for a in &bundle.ai_actions {
-            html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}%</td></tr>",
-                escape_html(&a.action_type), a.page_index + 1, escape_html(&a.text),
-                escape_html(&a.status), (a.confidence * 100.0) as u32,
+            html.push_str(&format!(
+                "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}%</td></tr>",
+                escape_html(&a.action_type),
+                a.page_index + 1,
+                escape_html(&a.text),
+                escape_html(&a.status),
+                (a.confidence * 100.0) as u32,
             ));
         }
         html.push_str("</tbody></table>");
@@ -99,8 +140,12 @@ pub fn generate_html_report(bundle: &ReportBundle, request: &ReportExportRequest
     if request.include_audit_summary && !bundle.audit_entries.is_empty() {
         html.push_str("<h2>Audit Summary</h2><table class=\"audit-table\"><thead><tr><th>Time</th><th>Action</th><th>Detail</th></tr></thead><tbody>");
         for e in bundle.audit_entries.iter().take(50) {
-            html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td></tr>",
-                escape_html(&e.timestamp), escape_html(&e.action), escape_html(&e.detail)));
+            html.push_str(&format!(
+                "<tr><td>{}</td><td>{}</td><td>{}</td></tr>",
+                escape_html(&e.timestamp),
+                escape_html(&e.action),
+                escape_html(&e.detail)
+            ));
         }
         html.push_str("</tbody></table>");
     }
@@ -109,8 +154,11 @@ pub fn generate_html_report(bundle: &ReportBundle, request: &ReportExportRequest
     if request.include_appendix && !bundle.citations.is_empty() {
         html.push_str("<h2>Appendix: Source Citations</h2><table class=\"citations-table\"><thead><tr><th>ID</th><th>Page</th><th>Source</th><th>Snippet</th></tr></thead><tbody>");
         for c in &bundle.citations {
-            html.push_str(&format!("<tr><td>{}</td><td>{}</td><td>{}</td><td class=\"snippet\">{}</td></tr>",
-                escape_html(&c.id), c.page + 1, escape_html(&c.source),
+            html.push_str(&format!(
+                "<tr><td>{}</td><td>{}</td><td>{}</td><td class=\"snippet\">{}</td></tr>",
+                escape_html(&c.id),
+                c.page + 1,
+                escape_html(&c.source),
                 escape_html(&c.snippet.chars().take(150).collect::<String>()),
             ));
         }
@@ -121,12 +169,25 @@ pub fn generate_html_report(bundle: &ReportBundle, request: &ReportExportRequest
     html
 }
 
-fn count_severities(a: &[ReportFinding], b: &[ReportFinding], c: &[ReportFinding], d: &[ReportFinding]) -> Vec<(String, usize)> {
-    let all: Vec<&str> = a.iter().chain(b).chain(c).chain(d).map(|f| f.severity.as_str()).collect();
+fn count_severities(
+    a: &[ReportFinding],
+    b: &[ReportFinding],
+    c: &[ReportFinding],
+    d: &[ReportFinding],
+) -> Vec<(String, usize)> {
+    let all: Vec<&str> = a
+        .iter()
+        .chain(b)
+        .chain(c)
+        .chain(d)
+        .map(|f| f.severity.as_str())
+        .collect();
     let mut counts = Vec::new();
     for sev in &["critical", "major", "warning", "info"] {
         let n = all.iter().filter(|s| **s == *sev).count();
-        if n > 0 { counts.push((sev.to_string(), n)); }
+        if n > 0 {
+            counts.push((sev.to_string(), n));
+        }
     }
     counts
 }
@@ -164,27 +225,64 @@ mod tests {
 
     #[test]
     fn escape_html_works() {
-        assert_eq!(escape_html("<script>alert('xss')</script>"), "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;");
+        assert_eq!(
+            escape_html("<script>alert('xss')</script>"),
+            "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;"
+        );
         assert_eq!(escape_html("a & b"), "a &amp; b");
     }
 
     #[test]
     fn generates_self_contained_html() {
         let bundle = ReportBundle {
-            session_id: "s1".into(), document_path: "/test.pdf".into(),
-            report_title: "Test Report".into(), review_summary: "Summary here.".into(),
-            findings: vec![ReportFinding { id: "f1".into(), severity: "warning".into(), category: "general".into(), title: "Test".into(), description: "Desc".into(), recommendation: "Fix".into(), page_refs: vec![0], confidence: 0.8 }],
-            risks: vec![], missing_information: vec![], engineering_findings: vec![],
-            calculation_traces: vec![], ai_actions: vec![], audit_entries: vec![],
-            citations: vec![ReportCitation { id: "c1".into(), page: 0, source: "native_text".into(), snippet: "test snippet".into(), score: 0.9 }],
-            warnings: vec![], metadata: ReportMetadata { generated_at: "2026-05-14".into(), page_count: 10, retrieval_mode: "hybrid".into(), ocr_included: false },
+            session_id: "s1".into(),
+            document_path: "/test.pdf".into(),
+            report_title: "Test Report".into(),
+            review_summary: "Summary here.".into(),
+            findings: vec![ReportFinding {
+                id: "f1".into(),
+                severity: "warning".into(),
+                category: "general".into(),
+                title: "Test".into(),
+                description: "Desc".into(),
+                recommendation: "Fix".into(),
+                page_refs: vec![0],
+                confidence: 0.8,
+            }],
+            risks: vec![],
+            missing_information: vec![],
+            engineering_findings: vec![],
+            calculation_traces: vec![],
+            ai_actions: vec![],
+            audit_entries: vec![],
+            citations: vec![ReportCitation {
+                id: "c1".into(),
+                page: 0,
+                source: "native_text".into(),
+                snippet: "test snippet".into(),
+                score: 0.9,
+            }],
+            warnings: vec![],
+            metadata: ReportMetadata {
+                generated_at: "2026-05-14".into(),
+                page_count: 10,
+                retrieval_mode: "hybrid".into(),
+                ocr_included: false,
+            },
         };
         let req = ReportExportRequest {
-            session_id: "s1".into(), report_title: "Test".into(), output_path: "/tmp/r.html".into(),
-            format: "html".into(), include_review: true, include_engineering: true,
-            include_calculation_traces: true, include_ai_actions: true,
-            include_audit_summary: true, include_source_snippets: true,
-            include_appendix: true, overwrite_existing: true,
+            session_id: "s1".into(),
+            report_title: "Test".into(),
+            output_path: "/tmp/r.html".into(),
+            format: "html".into(),
+            include_review: true,
+            include_engineering: true,
+            include_calculation_traces: true,
+            include_ai_actions: true,
+            include_audit_summary: true,
+            include_source_snippets: true,
+            include_appendix: true,
+            overwrite_existing: true,
         };
         let html = generate_html_report(&bundle, &req);
         assert!(html.contains("<!DOCTYPE html>"));
@@ -199,19 +297,39 @@ mod tests {
     #[test]
     fn html_escapes_user_text() {
         let bundle = ReportBundle {
-            session_id: "s1".into(), document_path: "<script>bad</script>".into(),
-            report_title: "Report".into(), review_summary: "a < b & c > d".into(),
-            findings: vec![], risks: vec![], missing_information: vec![],
-            engineering_findings: vec![], calculation_traces: vec![],
-            ai_actions: vec![], audit_entries: vec![], citations: vec![],
-            warnings: vec![], metadata: ReportMetadata { generated_at: "now".into(), page_count: 1, retrieval_mode: "bm25".into(), ocr_included: false },
+            session_id: "s1".into(),
+            document_path: "<script>bad</script>".into(),
+            report_title: "Report".into(),
+            review_summary: "a < b & c > d".into(),
+            findings: vec![],
+            risks: vec![],
+            missing_information: vec![],
+            engineering_findings: vec![],
+            calculation_traces: vec![],
+            ai_actions: vec![],
+            audit_entries: vec![],
+            citations: vec![],
+            warnings: vec![],
+            metadata: ReportMetadata {
+                generated_at: "now".into(),
+                page_count: 1,
+                retrieval_mode: "bm25".into(),
+                ocr_included: false,
+            },
         };
         let req = ReportExportRequest {
-            session_id: "s1".into(), report_title: "R".into(), output_path: "".into(),
-            format: "html".into(), include_review: true, include_engineering: false,
-            include_calculation_traces: false, include_ai_actions: false,
-            include_audit_summary: false, include_source_snippets: false,
-            include_appendix: false, overwrite_existing: true,
+            session_id: "s1".into(),
+            report_title: "R".into(),
+            output_path: "".into(),
+            format: "html".into(),
+            include_review: true,
+            include_engineering: false,
+            include_calculation_traces: false,
+            include_ai_actions: false,
+            include_audit_summary: false,
+            include_source_snippets: false,
+            include_appendix: false,
+            overwrite_existing: true,
         };
         let html = generate_html_report(&bundle, &req);
         assert!(html.contains("&lt;script&gt;"));

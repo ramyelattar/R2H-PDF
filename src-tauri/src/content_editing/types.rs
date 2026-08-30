@@ -98,10 +98,16 @@ pub struct TextInfo {
     pub decoding_quality: String,
 }
 
-fn default_decoding_quality() -> String { "ok".to_string() }
+fn default_decoding_quality() -> String {
+    "ok".to_string()
+}
 
-fn default_operator_type() -> String { "unknown".to_string() }
-fn default_editable_strategy() -> String { "safe_visual_replacement".to_string() }
+fn default_operator_type() -> String {
+    "unknown".to_string()
+}
+fn default_editable_strategy() -> String {
+    "safe_visual_replacement".to_string()
+}
 
 /// Image-specific metadata for a content object.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -177,7 +183,9 @@ pub struct NativeTextEditResult {
     pub verification_warnings: Vec<String>,
 }
 
-fn default_verification_status() -> VerificationStatus { VerificationStatus::NotRun }
+fn default_verification_status() -> VerificationStatus {
+    VerificationStatus::NotRun
+}
 
 /// Method used for the edit.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -329,7 +337,9 @@ pub struct NativeImageRotateRequest {
     pub degrees: i32,
 }
 
-fn default_image_layout_mode() -> String { "stretch".to_string() }
+fn default_image_layout_mode() -> String {
+    "stretch".to_string()
+}
 
 /// Result of a native image edit operation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -390,7 +400,9 @@ pub enum BlockOverflowPolicy {
     AllowOverflow,
 }
 
-fn default_block_overflow_policy() -> BlockOverflowPolicy { BlockOverflowPolicy::Reject }
+fn default_block_overflow_policy() -> BlockOverflowPolicy {
+    BlockOverflowPolicy::Reject
+}
 
 /// Request to apply a block-level text edit.
 #[derive(Debug, Clone, Serialize, Deserialize)]

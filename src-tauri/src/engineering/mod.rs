@@ -6,8 +6,8 @@ pub mod findings;
 pub mod types;
 pub mod units;
 
-use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
 use tauri::State;
 
 use types::*;
@@ -47,23 +47,61 @@ pub fn engineering_calculate(request: CalculateRequest) -> Result<CalculationTra
         "sum_connected_load" => Ok(calculator::sum_connected_load(&request.inputs)),
         "sum_apparent_load" => Ok(calculator::sum_apparent_load(&request.inputs)),
         "kw_to_kva" => {
-            let kw = request.inputs.iter().find(|i| matches!(i.unit, EngineeringUnit::KW)).map(|i| i.value).unwrap_or(0.0);
-            let pf = request.inputs.iter().find(|i| matches!(i.unit, EngineeringUnit::PowerFactor)).map(|i| i.value);
+            let kw = request
+                .inputs
+                .iter()
+                .find(|i| matches!(i.unit, EngineeringUnit::KW))
+                .map(|i| i.value)
+                .unwrap_or(0.0);
+            let pf = request
+                .inputs
+                .iter()
+                .find(|i| matches!(i.unit, EngineeringUnit::PowerFactor))
+                .map(|i| i.value);
             Ok(calculator::kw_to_kva(kw, pf))
         }
         "kva_to_kw" => {
-            let kva = request.inputs.iter().find(|i| matches!(i.unit, EngineeringUnit::KVA)).map(|i| i.value).unwrap_or(0.0);
-            let pf = request.inputs.iter().find(|i| matches!(i.unit, EngineeringUnit::PowerFactor)).map(|i| i.value);
+            let kva = request
+                .inputs
+                .iter()
+                .find(|i| matches!(i.unit, EngineeringUnit::KVA))
+                .map(|i| i.value)
+                .unwrap_or(0.0);
+            let pf = request
+                .inputs
+                .iter()
+                .find(|i| matches!(i.unit, EngineeringUnit::PowerFactor))
+                .map(|i| i.value);
             Ok(calculator::kva_to_kw(kva, pf))
         }
         "three_phase_kva" => {
-            let v = request.inputs.iter().find(|i| matches!(i.unit, EngineeringUnit::V)).map(|i| i.value).unwrap_or(0.0);
-            let a = request.inputs.iter().find(|i| matches!(i.unit, EngineeringUnit::A)).map(|i| i.value).unwrap_or(0.0);
+            let v = request
+                .inputs
+                .iter()
+                .find(|i| matches!(i.unit, EngineeringUnit::V))
+                .map(|i| i.value)
+                .unwrap_or(0.0);
+            let a = request
+                .inputs
+                .iter()
+                .find(|i| matches!(i.unit, EngineeringUnit::A))
+                .map(|i| i.value)
+                .unwrap_or(0.0);
             Ok(calculator::three_phase_kva(v, a))
         }
         "single_phase_kva" => {
-            let v = request.inputs.iter().find(|i| matches!(i.unit, EngineeringUnit::V)).map(|i| i.value).unwrap_or(0.0);
-            let a = request.inputs.iter().find(|i| matches!(i.unit, EngineeringUnit::A)).map(|i| i.value).unwrap_or(0.0);
+            let v = request
+                .inputs
+                .iter()
+                .find(|i| matches!(i.unit, EngineeringUnit::V))
+                .map(|i| i.value)
+                .unwrap_or(0.0);
+            let a = request
+                .inputs
+                .iter()
+                .find(|i| matches!(i.unit, EngineeringUnit::A))
+                .map(|i| i.value)
+                .unwrap_or(0.0);
             Ok(calculator::single_phase_kva(v, a))
         }
         other => Err(format!("Unknown calculation type: {other}")),
@@ -93,12 +131,17 @@ pub fn engineering_get_page_texts(
     include_ocr: bool,
 ) -> Result<Vec<PageEngineeringText>, String> {
     // Get native text for all pages.
-    let native_texts = doc_state.store.extract_all_pages_text(session_id.clone())
+    let native_texts = doc_state
+        .store
+        .extract_all_pages_text(session_id.clone())
         .map_err(|e| e.to_string())?;
 
     // Get OCR texts if requested.
     let ocr_texts: Vec<(usize, String)> = if include_ocr {
-        let engine = ocr_state.engine.lock().map_err(|_| "OCR lock poisoned".to_string())?;
+        let engine = ocr_state
+            .engine
+            .lock()
+            .map_err(|_| "OCR lock poisoned".to_string())?;
         engine.cache.all_texts_for_session(&session_id)
     } else {
         Vec::new()
@@ -154,7 +197,9 @@ pub fn engineering_clear_load_rows(state: State<'_, EngineeringState>) {
 }
 
 #[tauri::command]
-pub fn engineering_generate_findings(state: State<'_, EngineeringState>) -> Vec<EngineeringFinding> {
+pub fn engineering_generate_findings(
+    state: State<'_, EngineeringState>,
+) -> Vec<EngineeringFinding> {
     let rows = state.rows.lock().unwrap();
     let (new_findings, new_traces) = findings::generate_findings(&rows);
     let mut findings_store = state.findings.lock().unwrap();
@@ -170,6 +215,15 @@ pub fn engineering_get_findings(state: State<'_, EngineeringState>) -> Vec<Engin
 }
 
 #[tauri::command]
-pub fn engineering_get_calculation_trace(state: State<'_, EngineeringState>, calculation_id: String) -> Option<CalculationTrace> {
-    state.traces.lock().unwrap().iter().find(|t| t.calculation_id == calculation_id).cloned()
+pub fn engineering_get_calculation_trace(
+    state: State<'_, EngineeringState>,
+    calculation_id: String,
+) -> Option<CalculationTrace> {
+    state
+        .traces
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|t| t.calculation_id == calculation_id)
+        .cloned()
 }

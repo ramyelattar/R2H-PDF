@@ -13,7 +13,7 @@
 
 use std::path::PathBuf;
 
-use base64::{Engine as _, engine::general_purpose};
+use base64::{engine::general_purpose, Engine as _};
 use mupdf::pdf::PdfDocument;
 
 #[derive(Debug, Clone)]
@@ -43,6 +43,12 @@ pub struct SignatureEmbedReport {
     pub failed_ids: Vec<String>,
     /// Phase 27A — how many embeds preserved the source aspect ratio.
     pub aspect_preserved: usize,
+}
+
+impl Default for SignatureEmbedReport {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SignatureEmbedReport {
@@ -97,7 +103,9 @@ pub fn decode_image_data_url(data_url: &str) -> Result<(String, Vec<u8>), String
     if !trimmed.starts_with("data:") {
         return Err("not a data: URL".to_string());
     }
-    let comma = trimmed.find(',').ok_or_else(|| "data URL missing comma".to_string())?;
+    let comma = trimmed
+        .find(',')
+        .ok_or_else(|| "data URL missing comma".to_string())?;
     let meta = &trimmed[5..comma]; // strip "data:"
     let payload = &trimmed[comma + 1..];
 
@@ -186,7 +194,9 @@ fn merge_into_resources(
             .get_dict("Resources")
             .map_err(|e| format!("get Resources step1: {e}"))?;
         if existing.is_none() {
-            let new_res = pdf_doc.new_dict().map_err(|e| format!("new_dict Resources: {e}"))?;
+            let new_res = pdf_doc
+                .new_dict()
+                .map_err(|e| format!("new_dict Resources: {e}"))?;
             page_dict
                 .dict_put("Resources", new_res)
                 .map_err(|e| format!("dict_put Resources: {e}"))?;
@@ -202,7 +212,10 @@ fn merge_into_resources(
             .get_dict("Resources")
             .map_err(|e| format!("get Resources step2: {e}"))?
             .ok_or_else(|| "Resources missing after creation".to_string())?;
-        if let Some(resolved) = resources.resolve().map_err(|e| format!("resolve Resources: {e}"))? {
+        if let Some(resolved) = resources
+            .resolve()
+            .map_err(|e| format!("resolve Resources: {e}"))?
+        {
             resources = resolved;
         }
         if !resources.is_dict().unwrap_or(false) {
@@ -212,7 +225,9 @@ fn merge_into_resources(
             .get_dict("XObject")
             .map_err(|e| format!("get XObject step2: {e}"))?;
         if existing_xo.is_none() {
-            let new_xo = pdf_doc.new_dict().map_err(|e| format!("new_dict XObject: {e}"))?;
+            let new_xo = pdf_doc
+                .new_dict()
+                .map_err(|e| format!("new_dict XObject: {e}"))?;
             resources
                 .dict_put("XObject", new_xo)
                 .map_err(|e| format!("dict_put XObject: {e}"))?;
@@ -227,14 +242,20 @@ fn merge_into_resources(
         .get_dict("Resources")
         .map_err(|e| format!("get Resources step3: {e}"))?
         .ok_or_else(|| "Resources missing for put".to_string())?;
-    if let Some(resolved) = resources.resolve().map_err(|e| format!("resolve Resources final: {e}"))? {
+    if let Some(resolved) = resources
+        .resolve()
+        .map_err(|e| format!("resolve Resources final: {e}"))?
+    {
         resources = resolved;
     }
     let mut xobject = resources
         .get_dict("XObject")
         .map_err(|e| format!("get XObject step3: {e}"))?
         .ok_or_else(|| "XObject missing for put".to_string())?;
-    if let Some(resolved) = xobject.resolve().map_err(|e| format!("resolve XObject: {e}"))? {
+    if let Some(resolved) = xobject
+        .resolve()
+        .map_err(|e| format!("resolve XObject: {e}"))?
+    {
         xobject = resolved;
     }
     xobject
@@ -259,8 +280,18 @@ pub fn embed_signatures(
     let temp_dir = std::env::temp_dir();
 
     for (idx, spec) in specs.iter().enumerate() {
-        match embed_one_signature(pdf_doc, &temp_dir, idx, &page_w_pts_for, &page_h_pts_for, spec) {
-            Ok(EmbedDetail { aspect_preserved, warning }) => {
+        match embed_one_signature(
+            pdf_doc,
+            &temp_dir,
+            idx,
+            &page_w_pts_for,
+            &page_h_pts_for,
+            spec,
+        ) {
+            Ok(EmbedDetail {
+                aspect_preserved,
+                warning,
+            }) => {
                 report.embedded += 1;
                 report.embedded_ids.push(spec.id.clone());
                 if aspect_preserved {
@@ -275,7 +306,8 @@ pub fn embed_signatures(
                 report.failed_ids.push(spec.id.clone());
                 report.warnings.push(format!(
                     "Failed to embed signature {} on page {}: {e}",
-                    spec.id, spec.page_index + 1
+                    spec.id,
+                    spec.page_index + 1
                 ));
             }
         }
@@ -322,7 +354,9 @@ fn embed_one_signature(
 
     let load_result: Result<EmbedDetail, String> = (|| {
         let image = mupdf::Image::from_file(
-            tmp_path.to_str().ok_or_else(|| "temp path not utf-8".to_string())?,
+            tmp_path
+                .to_str()
+                .ok_or_else(|| "temp path not utf-8".to_string())?,
         )
         .map_err(|e| format!("Image::from_file: {e}"))?;
 
@@ -334,7 +368,8 @@ fn embed_one_signature(
             let h = image.height();
             if w > 0 && h > 0 {
                 (w as f32, h as f32, "mupdf")
-            } else if let (Some(w), Some(h)) = (spec.image_natural_width, spec.image_natural_height) {
+            } else if let (Some(w), Some(h)) = (spec.image_natural_width, spec.image_natural_height)
+            {
                 (w as f32, h as f32, "caller_dims")
             } else {
                 (0.0, 0.0, "unknown")
@@ -367,7 +402,9 @@ fn embed_one_signature(
         };
 
         // 3. Add image XObject to document → indirect reference.
-        let image_ref = pdf_doc.add_image(&image).map_err(|e| format!("add_image: {e}"))?;
+        let image_ref = pdf_doc
+            .add_image(&image)
+            .map_err(|e| format!("add_image: {e}"))?;
 
         // 4. Insert the image XObject reference into /Resources/XObject.
         let resource_name = format!("R2HSig{idx}");
@@ -400,7 +437,8 @@ fn embed_one_signature(
                         .map_err(|e| format!("array_push Contents: {e}"))?;
                 } else {
                     let mut arr = pdf_doc.new_array().map_err(|e| format!("new_array: {e}"))?;
-                    arr.array_push(c).map_err(|e| format!("array_push original: {e}"))?;
+                    arr.array_push(c)
+                        .map_err(|e| format!("array_push original: {e}"))?;
                     arr.array_push(new_stream)
                         .map_err(|e| format!("array_push new: {e}"))?;
                     page_dict
@@ -415,7 +453,10 @@ fn embed_one_signature(
             }
         }
 
-        Ok(EmbedDetail { aspect_preserved, warning })
+        Ok(EmbedDetail {
+            aspect_preserved,
+            warning,
+        })
     })();
 
     // 6. Always remove the temp file.
@@ -440,25 +481,33 @@ mod tests {
 
     #[test]
     fn decode_rejects_non_data_url() {
-        let err = decode_image_data_url("http://example.com/foo.png").err().unwrap();
+        let err = decode_image_data_url("http://example.com/foo.png")
+            .err()
+            .unwrap();
         assert!(err.contains("not a data: URL"));
     }
 
     #[test]
     fn decode_rejects_missing_comma() {
-        let err = decode_image_data_url("data:image/png;base64").err().unwrap();
+        let err = decode_image_data_url("data:image/png;base64")
+            .err()
+            .unwrap();
         assert!(err.contains("missing comma"));
     }
 
     #[test]
     fn decode_rejects_non_base64_url() {
-        let err = decode_image_data_url("data:image/png,abc%20def").err().unwrap();
+        let err = decode_image_data_url("data:image/png,abc%20def")
+            .err()
+            .unwrap();
         assert!(err.contains("base64-encoded"));
     }
 
     #[test]
     fn decode_rejects_bad_base64() {
-        let err = decode_image_data_url("data:image/png;base64,@@@@").err().unwrap();
+        let err = decode_image_data_url("data:image/png;base64,@@@@")
+            .err()
+            .unwrap();
         assert!(err.contains("base64 decode failed"));
     }
 
@@ -512,7 +561,11 @@ mod tests {
     fn embed_signature_changes_pdf_bytes_and_references_image() {
         // Build a minimal valid PDF using mupdf's own API.
         let mut src = mupdf::pdf::PdfDocument::new();
-        src.new_page(mupdf::Size { width: 612.0, height: 792.0 }).unwrap();
+        src.new_page(mupdf::Size {
+            width: 612.0,
+            height: 792.0,
+        })
+        .unwrap();
         let mut bytes: Vec<u8> = Vec::new();
         src.write_to(&mut bytes).unwrap();
 
@@ -527,12 +580,7 @@ mod tests {
             image_natural_width: None,
             image_natural_height: None,
         }];
-        let report = embed_signatures(
-            &mut pdf,
-            |_p| Some(612.0),
-            |_p| Some(792.0),
-            &specs,
-        );
+        let report = embed_signatures(&mut pdf, |_p| Some(612.0), |_p| Some(792.0), &specs);
         assert_eq!(report.failed, 0, "warnings: {:?}", report.warnings);
         assert_eq!(report.embedded, 1);
         assert!(report.embedded_ids.contains(&"sig-1".to_string()));
@@ -540,9 +588,15 @@ mod tests {
         // Serialise and look for the draw operator we appended.
         let mut out: Vec<u8> = Vec::new();
         pdf.write_to(&mut out).unwrap();
-        assert!(out.len() > bytes.len(), "expected pdf to grow after image embed");
+        assert!(
+            out.len() > bytes.len(),
+            "expected pdf to grow after image embed"
+        );
         let stringy: String = String::from_utf8_lossy(&out).to_string();
-        assert!(stringy.contains("/R2HSig0"), "expected /R2HSig0 resource in output");
+        assert!(
+            stringy.contains("/R2HSig0"),
+            "expected /R2HSig0 resource in output"
+        );
     }
 
     // ─── Phase 27A: fit_rect_preserving_aspect ───────────────────────
@@ -609,7 +663,11 @@ mod tests {
     #[test]
     fn embed_signature_with_preserve_aspect_reports_aspect_preserved() {
         let mut src = mupdf::pdf::PdfDocument::new();
-        src.new_page(mupdf::Size { width: 612.0, height: 792.0 }).unwrap();
+        src.new_page(mupdf::Size {
+            width: 612.0,
+            height: 792.0,
+        })
+        .unwrap();
         let mut bytes: Vec<u8> = Vec::new();
         src.write_to(&mut bytes).unwrap();
         let mut pdf = mupdf::pdf::PdfDocument::from_bytes(&bytes).unwrap();
@@ -625,12 +683,7 @@ mod tests {
             image_natural_width: None,
             image_natural_height: None,
         }];
-        let report = embed_signatures(
-            &mut pdf,
-            |_| Some(612.0),
-            |_| Some(792.0),
-            &specs,
-        );
+        let report = embed_signatures(&mut pdf, |_| Some(612.0), |_| Some(792.0), &specs);
         assert_eq!(report.embedded, 1, "warnings: {:?}", report.warnings);
         assert_eq!(report.aspect_preserved, 1);
     }
@@ -638,7 +691,11 @@ mod tests {
     #[test]
     fn embed_signature_without_preserve_aspect_does_not_count_aspect_preserved() {
         let mut src = mupdf::pdf::PdfDocument::new();
-        src.new_page(mupdf::Size { width: 612.0, height: 792.0 }).unwrap();
+        src.new_page(mupdf::Size {
+            width: 612.0,
+            height: 792.0,
+        })
+        .unwrap();
         let mut bytes: Vec<u8> = Vec::new();
         src.write_to(&mut bytes).unwrap();
         let mut pdf = mupdf::pdf::PdfDocument::from_bytes(&bytes).unwrap();
@@ -653,12 +710,7 @@ mod tests {
             image_natural_width: None,
             image_natural_height: None,
         }];
-        let report = embed_signatures(
-            &mut pdf,
-            |_| Some(612.0),
-            |_| Some(792.0),
-            &specs,
-        );
+        let report = embed_signatures(&mut pdf, |_| Some(612.0), |_| Some(792.0), &specs);
         assert_eq!(report.embedded, 1);
         assert_eq!(report.aspect_preserved, 0);
     }
@@ -666,7 +718,11 @@ mod tests {
     #[test]
     fn embed_signature_reports_failure_for_bad_data_url() {
         let mut src = mupdf::pdf::PdfDocument::new();
-        src.new_page(mupdf::Size { width: 612.0, height: 792.0 }).unwrap();
+        src.new_page(mupdf::Size {
+            width: 612.0,
+            height: 792.0,
+        })
+        .unwrap();
         let mut bytes: Vec<u8> = Vec::new();
         src.write_to(&mut bytes).unwrap();
         let mut pdf = mupdf::pdf::PdfDocument::from_bytes(&bytes).unwrap();
@@ -682,6 +738,9 @@ mod tests {
         let report = embed_signatures(&mut pdf, |_| Some(612.0), |_| Some(792.0), &specs);
         assert_eq!(report.embedded, 0);
         assert_eq!(report.failed, 1);
-        assert!(report.warnings.iter().any(|w| w.contains("Failed to embed signature bad")));
+        assert!(report
+            .warnings
+            .iter()
+            .any(|w| w.contains("Failed to embed signature bad")));
     }
 }

@@ -19,7 +19,10 @@ impl BackgroundScheduler {
         }
     }
 
-    pub fn enqueue(&mut self, request: BackgroundJobRequest) -> Result<BackgroundJobTicket, PlatformLayerError> {
+    pub fn enqueue(
+        &mut self,
+        request: BackgroundJobRequest,
+    ) -> Result<BackgroundJobTicket, PlatformLayerError> {
         if request.max_runtime_ms == 0 {
             return Err(PlatformLayerError::InvalidInput(
                 "max_runtime_ms must be greater than zero".to_string(),
@@ -62,7 +65,10 @@ impl BackgroundScheduler {
         Ok(job.clone())
     }
 
-    pub fn complete(&mut self, input: JobCompletionInput) -> Result<BackgroundJobState, PlatformLayerError> {
+    pub fn complete(
+        &mut self,
+        input: JobCompletionInput,
+    ) -> Result<BackgroundJobState, PlatformLayerError> {
         let job = self
             .queue
             .iter_mut()

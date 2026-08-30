@@ -67,11 +67,17 @@ impl PerformanceReliabilityManager {
         self.scheduler.enqueue(request)
     }
 
-    pub fn mark_job_running(&mut self, job_id: String) -> Result<BackgroundJobState, PlatformLayerError> {
+    pub fn mark_job_running(
+        &mut self,
+        job_id: String,
+    ) -> Result<BackgroundJobState, PlatformLayerError> {
         self.scheduler.mark_running(&job_id)
     }
 
-    pub fn complete_job(&mut self, input: JobCompletionInput) -> Result<BackgroundJobState, PlatformLayerError> {
+    pub fn complete_job(
+        &mut self,
+        input: JobCompletionInput,
+    ) -> Result<BackgroundJobState, PlatformLayerError> {
         self.scheduler.complete(input)
     }
 

@@ -4,32 +4,35 @@
     "path": "local-ai\\workers\\paddleocr_vl_worker.py",
     "exactPattern": "from_pretrained",
     "classification": "offline-policy-guarded",
-    "reason": "Transformer loaders use a caller-provided local model path; adjacent arguments set local_files_only=True.",
+    "reason": "Transformer loaders use a caller-provided local model path; adjacent arguments set local_files_only=True. Re-verified 2026-08-30: every from_pretrained call site (AutoProcessor, AutoModelForCausalLM, PaddleOCRVL*) passes local_files_only=True with a bundled model path; no remote endpoint is referenced.",
     "runtimeReachable": true,
-    "mitigation": "Keep local_files_only=True on the AutoProcessor and AutoModelForVision2Seq calls; local OCR model must be bundled.",
+    "mitigation": "Keep local_files_only=True on the AutoProcessor and AutoModelForCausalLM calls; local OCR model must be bundled. Note: trust_remote_code=True on the processor loader executes code from the local model directory only; the model directory is bundled and must remain reviewed.",
     "owner": "Release QA",
-    "expiryDate": "2026-08-31"
+    "expiryDate": "2026-11-30",
+    "lastReviewed": "2026-08-30"
   },
   {
     "ruleId": "telemetry-generic",
     "path": "src\\types\\shell.ts",
     "exactPattern": "telemetryMode",
     "classification": "offline-policy-guarded",
-    "reason": "UI preference type only; no telemetry emitter or external endpoint is implemented.",
+    "reason": "UI preference type only; no telemetry emitter or external endpoint is implemented. Re-verified 2026-08-30: telemetryMode is a type member at src/types/shell.ts:137 and a repo-wide search finds no telemetry sender or external endpoint in src/.",
     "runtimeReachable": false,
     "mitigation": "Security source scan blocks any sender endpoint or external telemetry provider reference.",
     "owner": "Release QA",
-    "expiryDate": "2026-08-31"
+    "expiryDate": "2026-11-30",
+    "lastReviewed": "2026-08-30"
   },
   {
     "ruleId": "remote-trust-code",
     "path": "local-ai\\workers\\paddleocr_vl_worker.py",
     "exactPattern": "local_files_only=True",
     "classification": "offline-policy-guarded",
-    "reason": "PaddleOCR-VL model loading uses local_files_only=True and a bundled local model path.",
+    "reason": "PaddleOCR-VL model loading uses local_files_only=True and a bundled local model path. Re-verified 2026-08-30: all six loader call sites pass local_files_only=True.",
     "runtimeReachable": true,
     "mitigation": "Keep OCR model assets bundled and reviewed; do not allow runtime downloads.",
     "owner": "Release QA",
-    "expiryDate": "2026-08-31"
+    "expiryDate": "2026-11-30",
+    "lastReviewed": "2026-08-30"
   }
 ]

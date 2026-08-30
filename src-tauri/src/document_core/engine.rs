@@ -4,8 +4,8 @@ use mupdf::Document as MuDocument;
 
 use super::errors::DocumentCoreError;
 use super::types::{
-    DocumentSummary, FontInfo, FormField, IncrementalSaveRequest, IncrementalSaveResponse, PageInfo,
-    PageLines, PdfObjectSummary, RecoveryReport, RenderRequest, RenderResponse,
+    DocumentSummary, FontInfo, FormField, IncrementalSaveRequest, IncrementalSaveResponse,
+    PageInfo, PageLines, PdfObjectSummary, RecoveryReport, RenderRequest, RenderResponse,
     TextExtractionRequest, TextExtractionResponse,
 };
 use super::vector::{NativeVectorPageResult, NativeVectorRequest};
@@ -47,7 +47,11 @@ pub struct OpenedDocument {
 }
 
 pub trait PdfEngine: Send + Sync + 'static {
-    fn open(&self, path: &Path, recover_if_damaged: bool) -> Result<OpenedDocument, DocumentCoreError>;
+    fn open(
+        &self,
+        path: &Path,
+        recover_if_damaged: bool,
+    ) -> Result<OpenedDocument, DocumentCoreError>;
 
     fn render_page(
         &self,
@@ -79,7 +83,10 @@ pub trait PdfEngine: Send + Sync + 'static {
     /// `String` per page.  Callers (e.g. the search-index builder) use this
     /// instead of issuing N individual `extract_text` IPC calls, each of which
     /// would otherwise re-parse the document from bytes.
-    fn extract_all_pages_text(&self, doc: &OpenedDocument) -> Result<Vec<String>, DocumentCoreError>;
+    fn extract_all_pages_text(
+        &self,
+        doc: &OpenedDocument,
+    ) -> Result<Vec<String>, DocumentCoreError>;
 
     /// Phase 25A: extract every page's text broken into individual lines, each
     /// with a bbox in PDF point space (origin bottom-left). Used by the

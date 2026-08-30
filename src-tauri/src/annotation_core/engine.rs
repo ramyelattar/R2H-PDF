@@ -33,18 +33,19 @@ fn iso8601_now() -> String {
     let mut y = 1970u32;
     let mut remaining = days_since_epoch;
     loop {
-        let days_in_year = if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) {
-            366
-        } else {
-            365
-        };
+        let days_in_year =
+            if y.is_multiple_of(4) && (!y.is_multiple_of(100) || y.is_multiple_of(400)) {
+                366
+            } else {
+                365
+            };
         if remaining < days_in_year {
             break;
         }
         remaining -= days_in_year;
         y += 1;
     }
-    let leap = y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
+    let leap = y.is_multiple_of(4) && (!y.is_multiple_of(100) || y.is_multiple_of(400));
     let month_days = [
         31u32,
         if leap { 29 } else { 28 },
@@ -684,7 +685,7 @@ impl AnnotationEngine {
             .get(session_id)
             .map(|m| {
                 m.values()
-                    .filter(|a| page_index.map_or(true, |p| a.page_index == p))
+                    .filter(|a| page_index.is_none_or(|p| a.page_index == p))
                     .cloned()
                     .collect()
             })
@@ -730,7 +731,7 @@ impl AnnotationEngine {
 
             // Start building the annotation dict.
             let mut dict_parts: Vec<String> = Vec::new();
-            dict_parts.push(format!("/Type /Annot"));
+            dict_parts.push("/Type /Annot".to_string());
             dict_parts.push(format!("/Subtype /{subtype}"));
             dict_parts.push(format!("/Rect [{x0:.4} {y0:.4} {x1:.4} {y1:.4}]"));
             dict_parts.push(format!("/Contents ({contents_escaped})"));
@@ -998,15 +999,12 @@ impl AnnotationEngine {
         let pattern = format!("/{key}");
         let pos = block.find(&pattern)?;
         let after = block[pos + pattern.len()..].trim_start();
-        if after.starts_with('/') {
-            let name: String = after[1..]
-                .chars()
-                .take_while(|c| !c.is_whitespace() && *c != '/' && *c != '>' && *c != '[')
-                .collect();
-            Some(name)
-        } else {
-            None
-        }
+        let name: String = after
+            .strip_prefix('/')?
+            .chars()
+            .take_while(|c| !c.is_whitespace() && *c != '/' && *c != '>' && *c != '[')
+            .collect();
+        Some(name)
     }
 
     /// Extracts `/Rect [x0 y0 x1 y1]` → `[x0, y0, x1, y1]`.

@@ -93,9 +93,13 @@ pub fn build_page_font_registry(
     session_id: &str,
     page_index: usize,
 ) -> Result<PageFontRegistry, String> {
-    let arc = doc_state.store.get_session_arc_pub(session_id)
+    let arc = doc_state
+        .store
+        .get_session_arc_pub(session_id)
         .map_err(|e| e.to_string())?;
-    let session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+    let session = arc
+        .lock()
+        .map_err(|_| "session lock poisoned".to_string())?;
 
     let pdf = mupdf::pdf::PdfDocument::from_bytes(&session.document.bytes)
         .map_err(|e| format!("Failed to open PDF: {e}"))?;
@@ -106,14 +110,19 @@ pub fn build_page_font_registry(
             "Page index {page_index} out of range (total: {page_count})"
         ));
     }
-    let page = pdf.load_page(page_no).map_err(|e| format!("load_page: {e}"))?;
+    let page = pdf
+        .load_page(page_no)
+        .map_err(|e| format!("load_page: {e}"))?;
     let pdf_page = mupdf::pdf::PdfPage::try_from(page).map_err(|e| format!("PdfPage: {e}"))?;
     let page_obj = pdf_page.object();
 
     let mut warnings: Vec<String> = Vec::new();
     let mut fonts: Vec<FontResourceInfo> = Vec::new();
 
-    let resources = match page_obj.get_dict("Resources").map_err(|e| format!("Resources: {e}"))? {
+    let resources = match page_obj
+        .get_dict("Resources")
+        .map_err(|e| format!("Resources: {e}"))?
+    {
         Some(r) => r.resolve().ok().flatten().unwrap_or(r),
         None => {
             warnings.push("Page has no /Resources dictionary; no fonts available.".to_string());
@@ -125,7 +134,10 @@ pub fn build_page_font_registry(
             });
         }
     };
-    let font_dict = match resources.get_dict("Font").map_err(|e| format!("Font: {e}"))? {
+    let font_dict = match resources
+        .get_dict("Font")
+        .map_err(|e| format!("Font: {e}"))?
+    {
         Some(f) => f.resolve().ok().flatten().unwrap_or(f),
         None => {
             warnings.push("Page /Resources has no /Font dictionary.".to_string());
@@ -149,7 +161,8 @@ pub fn build_page_font_registry(
             _ => continue,
         };
         let resolved_val = val_obj.resolve().ok().flatten().unwrap_or(val_obj);
-        let resource_name = key_obj.as_name()
+        let resource_name = key_obj
+            .as_name()
             .ok()
             .map(|b| String::from_utf8_lossy(b).into_owned())
             .unwrap_or_else(|| format!("font-{i}"));
@@ -202,7 +215,9 @@ fn classify_font_object(
     // Subset detection: BaseFont prefixed with 6 uppercase letters + '+'.
     let is_subset = base_font.len() > 7
         && base_font.as_bytes().get(6) == Some(&b'+')
-        && base_font.as_bytes()[..6].iter().all(|b| (b'A'..=b'Z').contains(b));
+        && base_font.as_bytes()[..6]
+            .iter()
+            .all(|b: &u8| b.is_ascii_uppercase());
 
     // Embedded detection: look for /FontDescriptor /FontFile* indirect.
     let is_embedded = font_obj
@@ -234,6 +249,10 @@ fn classify_font_object(
 
 /// Pure logic — given the inspected parts, return a `FontResourceInfo`.
 /// Exposed so unit tests can cover combinations without a live PDF.
+// The parameters are the individual fields inspected from a PDF font
+// dictionary; the production inspector and the unit tests both hold them
+// exactly in this shape, so a params struct would only add a layer.
+#[allow(clippy::too_many_arguments)]
 pub fn classify_font_info_from_parts(
     resource_name: &str,
     base_font: &str,
@@ -274,13 +293,13 @@ pub fn classify_font_info_from_parts(
     }
     if matches!(encoding_kind, EncodingKind::ToUnicode) {
         unsupported_reasons.push(
-            "Only ToUnicode reverse mapping available — native edit not implemented for this font.".to_string(),
+            "Only ToUnicode reverse mapping available — native edit not implemented for this font."
+                .to_string(),
         );
     }
     if matches!(encoding_kind, EncodingKind::Unknown) && !is_type0 {
-        unsupported_reasons.push(
-            "Encoding unknown — native edit will refuse non-ASCII replacements.".to_string(),
-        );
+        unsupported_reasons
+            .push("Encoding unknown — native edit will refuse non-ASCII replacements.".to_string());
     }
 
     // Eligibility rules:
@@ -294,8 +313,10 @@ pub fn classify_font_info_from_parts(
         encoding_kind,
         EncodingKind::WinAnsi | EncodingKind::MacRoman
     );
-    let can_native_edit_ascii =
-        !is_type3 && !is_subset && !is_type0 && (simple_8bit || matches!(encoding_kind, EncodingKind::CustomDifferences));
+    let can_native_edit_ascii = !is_type3
+        && !is_subset
+        && !is_type0
+        && (simple_8bit || matches!(encoding_kind, EncodingKind::CustomDifferences));
     let can_native_edit_latin1 = !is_type3 && !is_subset && !is_type0 && simple_8bit;
     let can_native_edit_arabic = false;
     let can_native_edit_cjk = false;
@@ -355,7 +376,11 @@ fn analyze_encoding(enc: &mupdf::pdf::PdfObject) -> EncodingAnalysis {
         .get_dict("BaseEncoding")
         .ok()
         .flatten()
-        .and_then(|b| b.as_name().ok().map(|bytes| String::from_utf8_lossy(bytes).into_owned()));
+        .and_then(|b| {
+            b.as_name()
+                .ok()
+                .map(|bytes| String::from_utf8_lossy(bytes).into_owned())
+        });
     let (differences_count, differences) = match resolved.get_dict("Differences").ok().flatten() {
         Some(arr) => {
             let arr_resolved = arr.resolve().ok().flatten().unwrap_or(arr);
@@ -363,7 +388,9 @@ fn analyze_encoding(enc: &mupdf::pdf::PdfObject) -> EncodingAnalysis {
             // Read tokens as either int or /name and feed parse_differences_tokens.
             let mut tokens: Vec<String> = Vec::with_capacity(len);
             for i in 0..len as i32 {
-                let Ok(Some(entry)) = arr_resolved.get_array(i) else { continue };
+                let Ok(Some(entry)) = arr_resolved.get_array(i) else {
+                    continue;
+                };
                 let entry_r = entry.resolve().ok().flatten().unwrap_or(entry);
                 // Either an integer code or a name like /eacute.
                 if entry_r.is_name().unwrap_or(false) {
@@ -424,9 +451,15 @@ mod tests {
     #[test]
     fn type1_winansi_is_native_safe_for_ascii_and_latin1() {
         let info = classify_font_info_from_parts(
-            "F1", "Helvetica", "Type1", EncodingKind::WinAnsi,
-            Some("WinAnsiEncoding".to_string()), 0,
-            false, false, false,
+            "F1",
+            "Helvetica",
+            "Type1",
+            EncodingKind::WinAnsi,
+            Some("WinAnsiEncoding".to_string()),
+            0,
+            false,
+            false,
+            false,
         );
         assert!(info.is_type1);
         assert!(info.can_native_edit_ascii);
@@ -439,9 +472,15 @@ mod tests {
     #[test]
     fn truetype_winansi_is_native_safe() {
         let info = classify_font_info_from_parts(
-            "F2", "Arial", "TrueType", EncodingKind::WinAnsi,
-            Some("WinAnsiEncoding".to_string()), 0,
-            false, false, true,
+            "F2",
+            "Arial",
+            "TrueType",
+            EncodingKind::WinAnsi,
+            Some("WinAnsiEncoding".to_string()),
+            0,
+            false,
+            false,
+            true,
         );
         assert!(info.is_true_type);
         assert!(info.can_native_edit_ascii);
@@ -451,21 +490,36 @@ mod tests {
     #[test]
     fn subset_prefix_is_detected_and_marked_unsafe() {
         let info = classify_font_info_from_parts(
-            "F3", "ABCDEF+Helvetica", "Type1", EncodingKind::WinAnsi,
-            Some("WinAnsiEncoding".to_string()), 0,
-            false, true, true,
+            "F3",
+            "ABCDEF+Helvetica",
+            "Type1",
+            EncodingKind::WinAnsi,
+            Some("WinAnsiEncoding".to_string()),
+            0,
+            false,
+            true,
+            true,
         );
         assert!(info.is_subset);
         assert!(!info.can_native_edit_ascii);
-        assert!(info.unsupported_reasons.iter().any(|r| r.to_lowercase().contains("subset")));
+        assert!(info
+            .unsupported_reasons
+            .iter()
+            .any(|r| r.to_lowercase().contains("subset")));
     }
 
     #[test]
     fn to_unicode_presence_is_recorded() {
         let info = classify_font_info_from_parts(
-            "F4", "Arial", "TrueType", EncodingKind::WinAnsi,
-            Some("WinAnsiEncoding".to_string()), 0,
-            true, false, true,
+            "F4",
+            "Arial",
+            "TrueType",
+            EncodingKind::WinAnsi,
+            Some("WinAnsiEncoding".to_string()),
+            0,
+            true,
+            false,
+            true,
         );
         assert!(info.has_to_unicode);
     }
@@ -473,56 +527,104 @@ mod tests {
     #[test]
     fn identity_h_type0_is_marked_unsafe() {
         let info = classify_font_info_from_parts(
-            "F5", "STHeiti", "Type0", EncodingKind::IdentityH,
-            Some("Identity-H".to_string()), 0,
-            true, true, true,
+            "F5",
+            "STHeiti",
+            "Type0",
+            EncodingKind::IdentityH,
+            Some("Identity-H".to_string()),
+            0,
+            true,
+            true,
+            true,
         );
         assert!(info.is_type0);
         assert!(!info.can_native_edit_ascii);
-        assert!(info.unsupported_reasons.iter().any(|r| r.to_lowercase().contains("identity-h")));
+        assert!(info
+            .unsupported_reasons
+            .iter()
+            .any(|r| r.to_lowercase().contains("identity-h")));
     }
 
     #[test]
     fn differences_array_is_counted() {
         let info = classify_font_info_from_parts(
-            "F6", "Custom", "Type1", EncodingKind::CustomDifferences,
-            Some("WinAnsiEncoding".to_string()), 5,
-            false, false, true,
+            "F6",
+            "Custom",
+            "Type1",
+            EncodingKind::CustomDifferences,
+            Some("WinAnsiEncoding".to_string()),
+            5,
+            false,
+            false,
+            true,
         );
         assert_eq!(info.differences_count, 5);
         assert_eq!(info.encoding_kind, EncodingKind::CustomDifferences);
-        assert!(info.unsupported_reasons.iter().any(|r| r.to_lowercase().contains("differences")));
+        assert!(info
+            .unsupported_reasons
+            .iter()
+            .any(|r| r.to_lowercase().contains("differences")));
     }
 
     #[test]
     fn type3_font_is_unsafe() {
         let info = classify_font_info_from_parts(
-            "F7", "MyType3", "Type3", EncodingKind::Unknown,
-            None, 0,
-            false, false, true,
+            "F7",
+            "MyType3",
+            "Type3",
+            EncodingKind::Unknown,
+            None,
+            0,
+            false,
+            false,
+            true,
         );
         assert!(info.is_type3);
         assert!(!info.can_native_edit_ascii);
-        assert!(info.unsupported_reasons.iter().any(|r| r.to_lowercase().contains("type3")));
+        assert!(info
+            .unsupported_reasons
+            .iter()
+            .any(|r| r.to_lowercase().contains("type3")));
     }
 
     #[test]
     fn classify_encoding_name_recognizes_standards() {
-        assert_eq!(classify_encoding_name("WinAnsiEncoding"), EncodingKind::WinAnsi);
-        assert_eq!(classify_encoding_name("MacRomanEncoding"), EncodingKind::MacRoman);
-        assert_eq!(classify_encoding_name("Identity-H"), EncodingKind::IdentityH);
-        assert_eq!(classify_encoding_name("Identity-V"), EncodingKind::IdentityV);
+        assert_eq!(
+            classify_encoding_name("WinAnsiEncoding"),
+            EncodingKind::WinAnsi
+        );
+        assert_eq!(
+            classify_encoding_name("MacRomanEncoding"),
+            EncodingKind::MacRoman
+        );
+        assert_eq!(
+            classify_encoding_name("Identity-H"),
+            EncodingKind::IdentityH
+        );
+        assert_eq!(
+            classify_encoding_name("Identity-V"),
+            EncodingKind::IdentityV
+        );
         assert_eq!(classify_encoding_name("SomeRandom"), EncodingKind::Unknown);
     }
 
     #[test]
     fn unknown_encoding_is_marked_unsafe_for_non_type0_font() {
         let info = classify_font_info_from_parts(
-            "F8", "Custom", "Type1", EncodingKind::Unknown,
-            None, 0,
-            false, false, true,
+            "F8",
+            "Custom",
+            "Type1",
+            EncodingKind::Unknown,
+            None,
+            0,
+            false,
+            false,
+            true,
         );
         assert!(!info.can_native_edit_ascii);
-        assert!(info.unsupported_reasons.iter().any(|r| r.to_lowercase().contains("encoding unknown")));
+        assert!(info
+            .unsupported_reasons
+            .iter()
+            .any(|r| r.to_lowercase().contains("encoding unknown")));
     }
 }

@@ -155,13 +155,13 @@ pub fn extract_native_vectors(
     doc: &OpenedDocument,
     request: &NativeVectorRequest,
 ) -> Result<NativeVectorPageResult, DocumentCoreError> {
-    let page_info =
-        doc.pages
-            .get(request.page_index)
-            .ok_or_else(|| DocumentCoreError::PageOutOfRange {
-                requested: request.page_index,
-                total: doc.pages.len(),
-            })?;
+    let page_info = doc
+        .pages
+        .get(request.page_index)
+        .ok_or(DocumentCoreError::PageOutOfRange {
+            requested: request.page_index,
+            total: doc.pages.len(),
+        })?;
     if !page_info.width_points.is_finite()
         || !page_info.height_points.is_finite()
         || page_info.width_points <= 0.0

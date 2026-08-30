@@ -33,7 +33,8 @@ const TRIAL_INTEGRITY_DOMAIN: &str = "R2H-PDF/trial-state/v2";
 
 /// Ed25519 public verification key of the license issuer (raw, 32 bytes).
 /// The matching private signing key is held by the license issuer only.
-const ISSUER_PUBLIC_KEY_HEX: &str = "0223b5981e87f74837a2cdbf0276388a8442302d01061317035c8920ced4e311";
+const ISSUER_PUBLIC_KEY_HEX: &str =
+    "0223b5981e87f74837a2cdbf0276388a8442302d01061317035c8920ced4e311";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LicenseStatus {
@@ -104,10 +105,7 @@ pub fn license_get_status() -> Result<LicenseStatus, String> {
 pub fn assert_feature_allowed(feature: &str) -> Result<(), String> {
     if license_file_path().is_file() {
         let payload = load_valid_license()?;
-        let granted = payload
-            .features
-            .iter()
-            .any(|f| f == feature || f == "*");
+        let granted = payload.features.iter().any(|f| f == feature || f == "*");
         if !granted {
             return Err(format!(
                 "feature '{feature}' is not included in license {}",
@@ -116,6 +114,9 @@ pub fn assert_feature_allowed(feature: &str) -> Result<(), String> {
         }
         return Ok(());
     }
+    // Trial path: make sure the state directory exists even when this is the
+    // first license-related call in the process (no prior license_get_status).
+    fs::create_dir_all(license_dir()).map_err(|e| format!("create license dir: {e}"))?;
     let trial_status = trial_status_and_record(Some(feature))?;
     if !trial_status.allowed {
         return Err(format!(
@@ -130,7 +131,8 @@ pub fn assert_feature_allowed(feature: &str) -> Result<(), String> {
 /// Returns the validated payload or the exact rejection reason.
 fn load_valid_license() -> Result<LicensePayload, String> {
     let path = license_file_path();
-    let raw = fs::read_to_string(&path).map_err(|e| format!("read license {}: {e}", path.display()))?;
+    let raw =
+        fs::read_to_string(&path).map_err(|e| format!("read license {}: {e}", path.display()))?;
     let payload = verify_license_with_key(&raw, &verification_key())?;
     if is_expired(now_unix(), payload.expires_unix) {
         return Err("license expired".to_string());
@@ -168,15 +170,17 @@ fn verify_license_with_key(raw: &str, public_key: &[u8; 32]) -> Result<LicensePa
     }
     let file: LicenseFile =
         serde_json::from_str(raw).map_err(|e| format!("license parse failed: {e}"))?;
-    let payload_json = serde_json::to_vec(&file.payload)
-        .map_err(|e| format!("serialize license payload: {e}"))?;
+    let payload_json =
+        serde_json::to_vec(&file.payload).map_err(|e| format!("serialize license payload: {e}"))?;
     let sig_bytes = general_purpose::STANDARD
         .decode(file.signature.as_bytes())
         .map_err(|_| "license signature is not valid base64".to_string())?;
-    let sig_array: [u8; SIGNATURE_LENGTH] = sig_bytes
-        .as_slice()
-        .try_into()
-        .map_err(|_| format!("license signature has invalid length {} (expected {SIGNATURE_LENGTH})", sig_bytes.len()))?;
+    let sig_array: [u8; SIGNATURE_LENGTH] = sig_bytes.as_slice().try_into().map_err(|_| {
+        format!(
+            "license signature has invalid length {} (expected {SIGNATURE_LENGTH})",
+            sig_bytes.len()
+        )
+    })?;
     let signature = Signature::from_bytes(&sig_array);
     let verifying_key = VerifyingKey::from_bytes(public_key)
         .map_err(|_| "embedded issuer public key is invalid".to_string())?;
@@ -230,7 +234,10 @@ fn trial_status_and_record(feature: Option<&str>) -> Result<LicenseStatus, Strin
         return Ok(status(
             "locked",
             false,
-            &format!("unsupported trial state schema {} (supported: {TRIAL_SCHEMA})", trial.schema),
+            &format!(
+                "unsupported trial state schema {} (supported: {TRIAL_SCHEMA})",
+                trial.schema
+            ),
         ));
     }
 
@@ -358,8 +365,15 @@ fn probe_feature(feature: &str, expected_allowed: bool) -> FeatureProbe {
         feature: feature.to_string(),
         expected_allowed,
         actual_allowed,
-        result: if actual_allowed == expected_allowed { "PASS" } else { "FAIL" }.to_string(),
-        reason: result.err().unwrap_or_else(|| "feature allowed".to_string()),
+        result: if actual_allowed == expected_allowed {
+            "PASS"
+        } else {
+            "FAIL"
+        }
+        .to_string(),
+        reason: result
+            .err()
+            .unwrap_or_else(|| "feature allowed".to_string()),
     }
 }
 
@@ -369,7 +383,9 @@ fn report(mode: &str, probes: Vec<FeatureProbe>, notes: Vec<String>) -> LicenseS
         mode: mode.to_string(),
         status: if failed { "FAIL" } else { "PASS" }.to_string(),
         license_dir: license_dir().display().to_string(),
-        trial_policy: format!("{TRIAL_DAYS} days, {MAX_LAUNCHES} launches; export/OCR/RAG/compare gated"),
+        trial_policy: format!(
+            "{TRIAL_DAYS} days, {MAX_LAUNCHES} launches; export/OCR/RAG/compare gated"
+        ),
         probes,
         notes,
     }
@@ -405,7 +421,11 @@ fn remove_license_file() -> Result<(), String> {
 fn write_trial(expired: bool, tampered: bool) -> Result<(), String> {
     let mut trial = TrialState {
         schema: TRIAL_SCHEMA,
-        first_seen_unix: now_unix().saturating_sub(if expired { (TRIAL_DAYS + 2) * 24 * 60 * 60 } else { 0 }),
+        first_seen_unix: now_unix().saturating_sub(if expired {
+            (TRIAL_DAYS + 2) * 24 * 60 * 60
+        } else {
+            0
+        }),
         last_seen_unix: now_unix(),
         launches: 1,
         exports: 0,
@@ -415,7 +435,11 @@ fn write_trial(expired: bool, tampered: bool) -> Result<(), String> {
         expired,
         integrity: String::new(),
     };
-    trial.integrity = if tampered { "tampered".to_string() } else { trial_integrity(&trial)? };
+    trial.integrity = if tampered {
+        "tampered".to_string()
+    } else {
+        trial_integrity(&trial)?
+    };
     write_trial_state(&trial)
 }
 
@@ -466,7 +490,8 @@ fn trial_integrity(trial: &TrialState) -> Result<String, String> {
 fn reset_store() -> Result<(), String> {
     let dir = license_dir();
     if dir.exists() {
-        fs::remove_dir_all(&dir).map_err(|e| format!("remove license dir {}: {e}", dir.display()))?;
+        fs::remove_dir_all(&dir)
+            .map_err(|e| format!("remove license dir {}: {e}", dir.display()))?;
     }
     fs::create_dir_all(&dir).map_err(|e| format!("create license dir {}: {e}", dir.display()))
 }
@@ -526,7 +551,8 @@ fn verification_key() -> [u8; 32] {
 /// full licensing flow with their own keypair. This static does not exist in
 /// production builds.
 #[cfg(test)]
-static TEST_VERIFICATION_KEY_OVERRIDE: std::sync::Mutex<Option<[u8; 32]>> = std::sync::Mutex::new(None);
+static TEST_VERIFICATION_KEY_OVERRIDE: std::sync::Mutex<Option<[u8; 32]>> =
+    std::sync::Mutex::new(None);
 
 fn to_hex(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
@@ -545,38 +571,61 @@ fn now_unix() -> u64 {
         .as_secs()
 }
 
+/// Test-only serialization for every test that touches license state: the
+/// license directory is process-global (env var), so license tests AND any
+/// other test exercising license-gated code paths (e.g. release smoke
+/// workflows) must hold this lock and use a private directory.
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use ed25519_dalek::{Signer, SigningKey};
+pub(crate) mod test_support {
+    use std::fs;
     use std::sync::{Mutex, MutexGuard};
 
-    /// License tests mutate process-global state (env dir + key override) and
-    /// therefore run serialized under this lock.
     static LICENSE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    pub(crate) struct LicenseTestEnv {
+        _guard: MutexGuard<'static, ()>,
+    }
+
+    impl LicenseTestEnv {
+        pub(crate) fn new(label: &str) -> Self {
+            let guard = LICENSE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            let dir = std::env::temp_dir().join(format!(
+                "r2h-license-test-{}-{}",
+                std::process::id(),
+                label
+            ));
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).expect("create test license dir");
+            std::env::set_var("R2H_LICENSE_DIR", &dir);
+            LicenseTestEnv { _guard: guard }
+        }
+    }
+
+    impl Drop for LicenseTestEnv {
+        fn drop(&mut self) {
+            std::env::remove_var("R2H_LICENSE_DIR");
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_support::LicenseTestEnv;
+    use super::*;
+    use ed25519_dalek::{Signer, SigningKey};
 
     const TEST_SEED_A: [u8; 32] = [7u8; 32];
     const TEST_SEED_B: [u8; 32] = [11u8; 32];
 
     struct TestEnv {
-        _guard: MutexGuard<'static, ()>,
+        _inner: LicenseTestEnv,
     }
 
     impl TestEnv {
         fn new(label: &str) -> Self {
-            let guard = LICENSE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-            let dir = std::env::temp_dir()
-                .join(format!("r2h-license-test-{}-{}", std::process::id(), label));
-            let _ = fs::remove_dir_all(&dir);
-            fs::create_dir_all(&dir).expect("create test license dir");
-            std::env::set_var("R2H_LICENSE_DIR", &dir);
-            TestEnv { _guard: guard }
-        }
-    }
-
-    impl Drop for TestEnv {
-        fn drop(&mut self) {
-            std::env::remove_var("R2H_LICENSE_DIR");
+            TestEnv {
+                _inner: LicenseTestEnv::new(label),
+            }
         }
     }
 
@@ -626,7 +675,10 @@ mod tests {
         set_verification_key(test_signing_key().verifying_key().to_bytes());
         let license = signed_license_json(
             &test_signing_key(),
-            &payload(now_unix() + 365 * 24 * 60 * 60, &["export", "ocr", "rag", "compare"]),
+            &payload(
+                now_unix() + 365 * 24 * 60 * 60,
+                &["export", "ocr", "rag", "compare"],
+            ),
         );
         write_license_file(&license).unwrap();
         let status = current_status().unwrap();
@@ -642,11 +694,15 @@ mod tests {
     fn feature_not_in_license_is_blocked() {
         let _env = TestEnv::new("feature-scope");
         set_verification_key(test_signing_key().verifying_key().to_bytes());
-        let license = signed_license_json(&test_signing_key(), &payload(now_unix() + 3600, &["ocr"]));
+        let license =
+            signed_license_json(&test_signing_key(), &payload(now_unix() + 3600, &["ocr"]));
         write_license_file(&license).unwrap();
         assert_feature_allowed("ocr").unwrap();
         let err = assert_feature_allowed("export").unwrap_err();
-        assert!(err.contains("not included in license"), "unexpected error: {err}");
+        assert!(
+            err.contains("not included in license"),
+            "unexpected error: {err}"
+        );
         clear_verification_key();
     }
 
@@ -657,13 +713,20 @@ mod tests {
         // Structurally valid file, but the signature is a zeroed value that
         // matches no real signature.
         let zeroed_signature = general_purpose::STANDARD.encode([0u8; SIGNATURE_LENGTH]);
-        let mut file: serde_json::Value =
-            serde_json::from_str(&signed_license_json(&test_signing_key(), &payload(now_unix() + 3600, &["export"]))).unwrap();
+        let mut file: serde_json::Value = serde_json::from_str(&signed_license_json(
+            &test_signing_key(),
+            &payload(now_unix() + 3600, &["export"]),
+        ))
+        .unwrap();
         file["signature"] = serde_json::Value::String(zeroed_signature);
         write_license_file(&file.to_string()).unwrap();
         let status = current_status().unwrap();
         assert!(!status.allowed);
-        assert!(status.reason.contains("signature mismatch"), "unexpected reason: {}", status.reason);
+        assert!(
+            status.reason.contains("signature mismatch"),
+            "unexpected reason: {}",
+            status.reason
+        );
         clear_verification_key();
     }
 
@@ -674,7 +737,8 @@ mod tests {
         let mut tampered = payload(now_unix() + 365 * 24 * 60 * 60, &["export"]);
         tampered.subject = "Tampered Subject".to_string();
         // Signed with the key, but the payload was modified afterwards.
-        let signature = test_signing_key().sign(&serde_json::to_vec(&payload(now_unix() + 3600, &["export"])).unwrap());
+        let signature = test_signing_key()
+            .sign(&serde_json::to_vec(&payload(now_unix() + 3600, &["export"])).unwrap());
         let file = LicenseFile {
             schema: LICENSE_SCHEMA,
             payload: serde_json::from_str(&serde_json::to_string(&tampered).unwrap()).unwrap(),
@@ -705,7 +769,10 @@ mod tests {
     fn expired_license_is_rejected() {
         let _env = TestEnv::new("expired");
         set_verification_key(test_signing_key().verifying_key().to_bytes());
-        let license = signed_license_json(&test_signing_key(), &payload(now_unix().saturating_sub(10), &["export"]));
+        let license = signed_license_json(
+            &test_signing_key(),
+            &payload(now_unix().saturating_sub(10), &["export"]),
+        );
         write_license_file(&license).unwrap();
         let status = current_status().unwrap();
         assert!(!status.allowed);
@@ -726,13 +793,20 @@ mod tests {
     fn unsupported_schema_is_rejected() {
         let _env = TestEnv::new("unsupported-schema");
         set_verification_key(test_signing_key().verifying_key().to_bytes());
-        let license = signed_license_json(&test_signing_key(), &payload(now_unix() + 3600, &["export"]));
+        let license = signed_license_json(
+            &test_signing_key(),
+            &payload(now_unix() + 3600, &["export"]),
+        );
         let upgraded = license.replace("\"schema\":2", "\"schema\":3");
         assert_ne!(license, upgraded);
         write_license_file(&upgraded).unwrap();
         let status = current_status().unwrap();
         assert!(!status.allowed);
-        assert!(status.reason.contains("unsupported license schema 3"), "unexpected reason: {}", status.reason);
+        assert!(
+            status.reason.contains("unsupported license schema 3"),
+            "unexpected reason: {}",
+            status.reason
+        );
         clear_verification_key();
     }
 
@@ -766,7 +840,11 @@ mod tests {
         write_license_file(&file).unwrap();
         let status = current_status().unwrap();
         assert!(!status.allowed);
-        assert!(status.reason.starts_with("license parse failed"), "unexpected reason: {}", status.reason);
+        assert!(
+            status.reason.starts_with("license parse failed"),
+            "unexpected reason: {}",
+            status.reason
+        );
         clear_verification_key();
     }
 
@@ -778,7 +856,10 @@ mod tests {
         assert!(status.allowed);
         assert_feature_allowed("ocr").unwrap();
         let state = fs::read_to_string(trial_file_path()).unwrap();
-        assert!(state.contains("\"schema\": 2"), "trial state should carry schema 2: {state}");
+        assert!(
+            state.contains("\"schema\": 2"),
+            "trial state should carry schema 2: {state}"
+        );
         assert!(state.contains("\"ocr_runs\": 1"));
     }
 
@@ -811,7 +892,10 @@ mod tests {
         let err = assert_feature_allowed("export").unwrap_err();
         assert!(err.contains("rollback"), "unexpected error: {err}");
         let after = fs::read_to_string(trial_file_path()).unwrap();
-        assert_eq!(before, after, "a rejected feature use must not rewrite trial state");
+        assert_eq!(
+            before, after,
+            "a rejected feature use must not rewrite trial state"
+        );
     }
 
     #[test]
@@ -833,7 +917,11 @@ mod tests {
         );
         write_trial_file_contents(&legacy).unwrap();
         let status = current_status().unwrap();
-        assert_eq!(status.mode, "trial", "legacy trial should migrate, not lock: {}", status.reason);
+        assert_eq!(
+            status.mode, "trial",
+            "legacy trial should migrate, not lock: {}",
+            status.reason
+        );
         let migrated = fs::read_to_string(trial_file_path()).unwrap();
         assert!(migrated.contains("\"schema\": 2"));
         assert!(

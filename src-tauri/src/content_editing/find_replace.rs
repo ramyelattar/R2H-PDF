@@ -22,9 +22,21 @@ pub fn preview_find_replace(
     let mut unsafe_count = 0usize;
     for page_index in pages {
         let objects = extract_page_content_objects(doc_state, &request.session_id, page_index)?;
-        for obj in objects.into_iter().filter(|o| matches!(o.object_type, ContentObjectType::TextSpan | ContentObjectType::TextBlock)) {
-            let Some(info) = obj.text_info.as_ref() else { continue; };
-            if !text_matches_find(&info.decoded_text, &request.find_text, request.case_sensitive, request.whole_word) {
+        for obj in objects.into_iter().filter(|o| {
+            matches!(
+                o.object_type,
+                ContentObjectType::TextSpan | ContentObjectType::TextBlock
+            )
+        }) {
+            let Some(info) = obj.text_info.as_ref() else {
+                continue;
+            };
+            if !text_matches_find(
+                &info.decoded_text,
+                &request.find_text,
+                request.case_sensitive,
+                request.whole_word,
+            ) {
                 continue;
             }
             let (safe, method, reason) = classify_match(&obj);
@@ -36,9 +48,17 @@ pub fn preview_find_replace(
                 id,
                 page_index,
                 content_object_id: obj.id,
-                text_preview: preview_text(&info.decoded_text, &request.find_text, request.case_sensitive),
+                text_preview: preview_text(
+                    &info.decoded_text,
+                    &request.find_text,
+                    request.case_sensitive,
+                ),
                 bbox: obj.bbox,
-                editable_status: if safe { "safe".to_string() } else { "not_safely_editable".to_string() },
+                editable_status: if safe {
+                    "safe".to_string()
+                } else {
+                    "not_safely_editable".to_string()
+                },
                 replacement_method: method,
                 safe,
                 reason,
@@ -61,8 +81,15 @@ pub fn apply_find_replace_item(
     item: &FindReplaceApplyItem,
 ) -> Result<NativeTextEditResult, String> {
     let objects = extract_page_content_objects(doc_state, session_id, item.page_index)?;
-    let target = objects.iter().find(|o| o.id == item.content_object_id)
-        .ok_or_else(|| format!("Find/replace target no longer exists: {}", item.content_object_id))?;
+    let target = objects
+        .iter()
+        .find(|o| o.id == item.content_object_id)
+        .ok_or_else(|| {
+            format!(
+                "Find/replace target no longer exists: {}",
+                item.content_object_id
+            )
+        })?;
     let (_safe, _method, reason) = classify_match(target);
     if let Some(reason) = reason {
         return Ok(NativeTextEditResult {
@@ -71,7 +98,11 @@ pub fn apply_find_replace_item(
             page_index: item.page_index,
             content_object_id: item.content_object_id.clone(),
             method: EditMethod::Rejected,
-            original_text: target.text_info.as_ref().map(|t| t.decoded_text.clone()).unwrap_or_default(),
+            original_text: target
+                .text_info
+                .as_ref()
+                .map(|t| t.decoded_text.clone())
+                .unwrap_or_default(),
             replacement_text: replace_text.to_string(),
             success: false,
             warnings: vec![reason],
@@ -79,13 +110,16 @@ pub fn apply_find_replace_item(
             verification_warnings: vec![],
         });
     }
-    apply_native_text_edit(doc_state, &NativeTextEditRequest {
-        session_id: session_id.to_string(),
-        page_index: item.page_index,
-        content_object_id: item.content_object_id.clone(),
-        replacement_text: replace_text.to_string(),
-        preserve_style: true,
-    })
+    apply_native_text_edit(
+        doc_state,
+        &NativeTextEditRequest {
+            session_id: session_id.to_string(),
+            page_index: item.page_index,
+            content_object_id: item.content_object_id.clone(),
+            replacement_text: replace_text.to_string(),
+            preserve_style: true,
+        },
+    )
 }
 
 fn pages_for_scope(
@@ -95,9 +129,13 @@ fn pages_for_scope(
     match request.scope {
         FindReplaceScope::CurrentPage => Ok(vec![request.current_page_index]),
         FindReplaceScope::WholeDocument => {
-            let arc = doc_state.store.get_session_arc_pub(&request.session_id)
+            let arc = doc_state
+                .store
+                .get_session_arc_pub(&request.session_id)
                 .map_err(|e| e.to_string())?;
-            let session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+            let session = arc
+                .lock()
+                .map_err(|_| "session lock poisoned".to_string())?;
             Ok((0..session.document.pages.len()).collect())
         }
     }
@@ -105,9 +143,15 @@ fn pages_for_scope(
 
 fn classify_match(obj: &ContentObject) -> (bool, String, Option<String>) {
     let Some(info) = obj.text_info.as_ref() else {
-        return (false, "Not safely editable".to_string(), Some("Text metadata is missing.".to_string()));
+        return (
+            false,
+            "Not safely editable".to_string(),
+            Some("Text metadata is missing.".to_string()),
+        );
     };
-    if info.decoding_quality == "garbled" || !info.encoding_safe && info.decoded_text.contains('\u{fffd}') {
+    if info.decoding_quality == "garbled"
+        || !info.encoding_safe && info.decoded_text.contains('\u{fffd}')
+    {
         return (
             false,
             "Not safely editable".to_string(),
@@ -115,17 +159,31 @@ fn classify_match(obj: &ContentObject) -> (bool, String, Option<String>) {
         );
     }
     if obj.editable_level == EditableLevel::ReadOnly {
-        return (false, "Not safely editable".to_string(), Some("Text object is read-only.".to_string()));
+        return (
+            false,
+            "Not safely editable".to_string(),
+            Some("Text object is read-only.".to_string()),
+        );
     }
-    if info.editable_strategy == "native_in_place" || obj.editable_level == EditableLevel::NativeEditable {
+    if info.editable_strategy == "native_in_place"
+        || obj.editable_level == EditableLevel::NativeEditable
+    {
         return (true, "Native text edit".to_string(), None);
     }
     (true, "Visual replacement".to_string(), None)
 }
 
 fn text_matches_find(text: &str, find: &str, case_sensitive: bool, whole_word: bool) -> bool {
-    let hay = if case_sensitive { text.to_string() } else { text.to_lowercase() };
-    let needle = if case_sensitive { find.to_string() } else { find.to_lowercase() };
+    let hay = if case_sensitive {
+        text.to_string()
+    } else {
+        text.to_lowercase()
+    };
+    let needle = if case_sensitive {
+        find.to_string()
+    } else {
+        find.to_lowercase()
+    };
     if !whole_word {
         return hay.contains(&needle);
     }
@@ -155,11 +213,28 @@ fn is_word_char(ch: char) -> bool {
 }
 
 fn preview_text(text: &str, find: &str, case_sensitive: bool) -> String {
-    let hay = if case_sensitive { text.to_string() } else { text.to_lowercase() };
-    let needle = if case_sensitive { find.to_string() } else { find.to_lowercase() };
+    let hay = if case_sensitive {
+        text.to_string()
+    } else {
+        text.to_lowercase()
+    };
+    let needle = if case_sensitive {
+        find.to_string()
+    } else {
+        find.to_lowercase()
+    };
     let idx = hay.find(&needle).unwrap_or(0);
-    let start = text[..idx].char_indices().rev().nth(24).map(|(i, _)| i).unwrap_or(0);
-    let end = text[idx..].char_indices().nth(find.chars().count() + 24).map(|(i, _)| idx + i).unwrap_or(text.len());
+    let start = text[..idx]
+        .char_indices()
+        .rev()
+        .nth(24)
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+    let end = text[idx..]
+        .char_indices()
+        .nth(find.chars().count() + 24)
+        .map(|(i, _)| idx + i)
+        .unwrap_or(text.len());
     text[start..end].to_string()
 }
 
@@ -214,6 +289,9 @@ mod tests {
         let (safe, method, reason) = classify_match(&obj);
         assert!(!safe);
         assert_eq!(method, "Not safely editable");
-        assert_eq!(reason.as_deref(), Some("Text encoding could not be decoded safely."));
+        assert_eq!(
+            reason.as_deref(),
+            Some("Text encoding could not be decoded safely.")
+        );
     }
 }

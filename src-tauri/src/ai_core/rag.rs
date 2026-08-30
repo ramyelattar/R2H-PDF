@@ -74,12 +74,18 @@ pub struct RagEngine {
 
 impl RagEngine {
     pub fn new() -> Self {
-        Self { indexes: HashMap::new() }
+        Self {
+            indexes: HashMap::new(),
+        }
     }
 
     /// Build a document index from page texts.
     /// Automatically attempts dense embeddings if runtime is available.
-    pub fn build_index(&mut self, request: BuildIndexRequest, embedding_runtime: Option<&mut super::embedding::EmbeddingRuntime>) -> IndexStatus {
+    pub fn build_index(
+        &mut self,
+        request: BuildIndexRequest,
+        embedding_runtime: Option<&mut super::embedding::EmbeddingRuntime>,
+    ) -> IndexStatus {
         let session_id = &request.session_id;
         let options = ChunkingOptions {
             include_ocr: request.include_ocr,
@@ -90,8 +96,16 @@ impl RagEngine {
         let mut all_chunks: Vec<DocumentChunk> = Vec::new();
 
         for page in &request.page_texts {
-            let native = if options.include_native_text { page.native_text.as_deref() } else { None };
-            let ocr = if options.include_ocr { page.ocr_text.as_deref() } else { None };
+            let native = if options.include_native_text {
+                page.native_text.as_deref()
+            } else {
+                None
+            };
+            let ocr = if options.include_ocr {
+                page.ocr_text.as_deref()
+            } else {
+                None
+            };
 
             let (text, source) = merge_page_texts(native, ocr);
             if text.is_empty() {
@@ -130,7 +144,9 @@ impl RagEngine {
                     }
                 }
             } else {
-                let reason = emb_runtime.fallback_reason().unwrap_or_else(|| "Embedding runtime not available".to_string());
+                let reason = emb_runtime
+                    .fallback_reason()
+                    .unwrap_or_else(|| "Embedding runtime not available".to_string());
                 index.set_dense_fallback(&reason);
             }
         } else {
@@ -144,7 +160,8 @@ impl RagEngine {
 
     /// Get index status for a session.
     pub fn get_index_status(&self, session_id: &str) -> IndexStatus {
-        self.indexes.get(session_id)
+        self.indexes
+            .get(session_id)
             .map(|idx| idx.status())
             .unwrap_or_else(|| IndexStatus {
                 session_id: session_id.to_string(),
@@ -166,8 +183,15 @@ impl RagEngine {
     }
 
     /// Semantic search — uses hybrid when dense vectors are available.
-    pub fn search(&self, session_id: &str, query: &str, top_k: usize, query_embedding: Option<&[f32]>) -> Vec<VectorSearchResult> {
-        self.indexes.get(session_id)
+    pub fn search(
+        &self,
+        session_id: &str,
+        query: &str,
+        top_k: usize,
+        query_embedding: Option<&[f32]>,
+    ) -> Vec<VectorSearchResult> {
+        self.indexes
+            .get(session_id)
             .map(|idx| idx.search_hybrid(query, query_embedding, top_k, 0.01))
             .unwrap_or_default()
     }
@@ -192,19 +216,34 @@ impl RagEngine {
                         None
                     }
                 }
-            } else { None }
-        } else { None };
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         // 2. Retrieve relevant chunks (hybrid or BM25).
         let top_k = request.top_k.unwrap_or(5);
-        let results = self.search(&request.session_id, &request.question, top_k, query_embedding.as_deref());
+        let results = self.search(
+            &request.session_id,
+            &request.question,
+            top_k,
+            query_embedding.as_deref(),
+        );
 
-        let dense_used = query_embedding.is_some() && self.indexes.get(&request.session_id).map(|i| i.is_hybrid()).unwrap_or(false);
+        let dense_used = query_embedding.is_some()
+            && self
+                .indexes
+                .get(&request.session_id)
+                .map(|i| i.is_hybrid())
+                .unwrap_or(false);
         let retrieval_mode_used = if dense_used { "hybrid" } else { "bm25" };
 
         if results.is_empty() {
             return Ok(RagAnswerResult {
-                answer: "I could not find enough evidence in the document to answer this.".to_string(),
+                answer: "I could not find enough evidence in the document to answer this."
+                    .to_string(),
                 citations: Vec::new(),
                 source_snippets: Vec::new(),
                 retrieved_count: 0,
@@ -223,18 +262,21 @@ impl RagEngine {
         }
 
         // 3. Build citations.
-        let citations: Vec<Citation> = results.iter().enumerate().map(|(i, r)| {
-            Citation {
+        let citations: Vec<Citation> = results
+            .iter()
+            .enumerate()
+            .map(|(i, r)| Citation {
                 citation_id: format!("cite-{}", i + 1),
                 page_index: r.page_index,
                 chunk_id: r.chunk_id.clone(),
                 snippet: truncate_snippet(&r.text, 200),
                 score: r.score,
                 source: r.source.clone(),
-            }
-        }).collect();
+            })
+            .collect();
 
-        let source_snippets: Vec<String> = results.iter()
+        let source_snippets: Vec<String> = results
+            .iter()
             .map(|r| truncate_snippet(&r.text, 300))
             .collect();
 
@@ -244,7 +286,9 @@ impl RagEngine {
         let prompt = build_rag_prompt(&request.question, &context, &citations);
 
         // 5. Generate answer using local LLM.
-        let default_model = runtime.registry.default_model()
+        let default_model = runtime
+            .registry
+            .default_model()
             .ok_or_else(|| "No default LLM model configured".to_string())?;
 
         let gen_request = LocalGenerateRequest {
@@ -260,7 +304,7 @@ impl RagEngine {
         let gen_result = runtime.generate(gen_request)?;
         let answer = gen_result.text.trim().to_string();
 
-        if gen_result.warnings.len() > 0 {
+        if !gen_result.warnings.is_empty() {
             warnings.extend(gen_result.warnings);
         }
 
@@ -295,7 +339,12 @@ Rules: \
 fn build_context(results: &[VectorSearchResult], max_chars: usize) -> String {
     let mut context = String::new();
     for (i, r) in results.iter().enumerate() {
-        let entry = format!("[Page {}] (Source: {})\n{}\n\n", r.page_index + 1, r.source, r.text);
+        let entry = format!(
+            "[Page {}] (Source: {})\n{}\n\n",
+            r.page_index + 1,
+            r.source,
+            r.text
+        );
         if context.len() + entry.len() > max_chars {
             break;
         }
@@ -326,9 +375,13 @@ trait FloorCharBoundary {
 
 impl FloorCharBoundary for str {
     fn floor_char_boundary(&self, index: usize) -> usize {
-        if index >= self.len() { return self.len(); }
+        if index >= self.len() {
+            return self.len();
+        }
         let mut i = index;
-        while i > 0 && !self.is_char_boundary(i) { i -= 1; }
+        while i > 0 && !self.is_char_boundary(i) {
+            i -= 1;
+        }
         i
     }
 }
@@ -372,8 +425,16 @@ mod tests {
             session_id: "s1".to_string(),
             include_ocr: false,
             page_texts: vec![
-                PageText { page_index: 0, native_text: Some("The contract value is $5 million.".to_string()), ocr_text: None },
-                PageText { page_index: 1, native_text: Some("Completion date is December 2025.".to_string()), ocr_text: None },
+                PageText {
+                    page_index: 0,
+                    native_text: Some("The contract value is $5 million.".to_string()),
+                    ocr_text: None,
+                },
+                PageText {
+                    page_index: 1,
+                    native_text: Some("Completion date is December 2025.".to_string()),
+                    ocr_text: None,
+                },
             ],
         };
         let status = engine.build_index(request, None);
@@ -396,13 +457,18 @@ mod tests {
     #[test]
     fn citations_built_from_retrieved_chunks() {
         let mut engine = RagEngine::new();
-        engine.build_index(BuildIndexRequest {
-            session_id: "s1".to_string(),
-            include_ocr: false,
-            page_texts: vec![
-                PageText { page_index: 2, native_text: Some("Steel reinforcement schedule shows 500 tons.".to_string()), ocr_text: None },
-            ],
-        }, None);
+        engine.build_index(
+            BuildIndexRequest {
+                session_id: "s1".to_string(),
+                include_ocr: false,
+                page_texts: vec![PageText {
+                    page_index: 2,
+                    native_text: Some("Steel reinforcement schedule shows 500 tons.".to_string()),
+                    ocr_text: None,
+                }],
+            },
+            None,
+        );
         let results = engine.search("s1", "steel reinforcement", 3, None);
         assert!(!results.is_empty());
         assert_eq!(results[0].page_index, 2);
@@ -411,11 +477,18 @@ mod tests {
     #[test]
     fn clear_index_removes_data() {
         let mut engine = RagEngine::new();
-        engine.build_index(BuildIndexRequest {
-            session_id: "s1".to_string(),
-            include_ocr: false,
-            page_texts: vec![PageText { page_index: 0, native_text: Some("test".to_string()), ocr_text: None }],
-        }, None);
+        engine.build_index(
+            BuildIndexRequest {
+                session_id: "s1".to_string(),
+                include_ocr: false,
+                page_texts: vec![PageText {
+                    page_index: 0,
+                    native_text: Some("test".to_string()),
+                    ocr_text: None,
+                }],
+            },
+            None,
+        );
         assert_eq!(engine.get_index_status("s1").status, "ready");
         engine.clear_index("s1");
         assert_eq!(engine.get_index_status("s1").status, "empty");
@@ -424,11 +497,18 @@ mod tests {
     #[test]
     fn build_index_reports_fallback_when_no_embedding() {
         let mut engine = RagEngine::new();
-        let status = engine.build_index(BuildIndexRequest {
-            session_id: "s1".to_string(),
-            include_ocr: false,
-            page_texts: vec![PageText { page_index: 0, native_text: Some("test content".to_string()), ocr_text: None }],
-        }, None);
+        let status = engine.build_index(
+            BuildIndexRequest {
+                session_id: "s1".to_string(),
+                include_ocr: false,
+                page_texts: vec![PageText {
+                    page_index: 0,
+                    native_text: Some("test content".to_string()),
+                    ocr_text: None,
+                }],
+            },
+            None,
+        );
         assert_eq!(status.retrieval_mode, "bm25");
         assert!(!status.dense_embedding_available);
         assert!(status.fallback_reason.is_some());

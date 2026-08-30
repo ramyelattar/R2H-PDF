@@ -5,7 +5,10 @@ pub enum DocumentCoreError {
     InvalidPdf(String),
     Io(String),
     SessionNotFound(String),
-    PageOutOfRange { requested: usize, total: usize },
+    PageOutOfRange {
+        requested: usize,
+        total: usize,
+    },
     RenderError(String),
     TextExtractionError(String),
     SaveError(String),
@@ -38,7 +41,9 @@ impl Display for DocumentCoreError {
                 write!(f, "page out of range: requested {requested}, total {total}")
             }
             DocumentCoreError::RenderError(msg) => write!(f, "render error: {msg}"),
-            DocumentCoreError::TextExtractionError(msg) => write!(f, "text extraction error: {msg}"),
+            DocumentCoreError::TextExtractionError(msg) => {
+                write!(f, "text extraction error: {msg}")
+            }
             DocumentCoreError::SaveError(msg) => write!(f, "save error: {msg}"),
             DocumentCoreError::RecoveryFailed(msg) => write!(f, "recovery failed: {msg}"),
             DocumentCoreError::LockPoisoned => write!(f, "concurrent lock poisoned"),

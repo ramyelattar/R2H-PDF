@@ -18,11 +18,11 @@ pub mod review;
 pub mod types;
 pub mod vector_index;
 
+pub use action_planner::ActionPlannerState;
 pub use engine::AiEngine;
 pub use ipc::*;
 pub use local_runtime::LocalRuntime;
 pub use rag::RagState;
-pub use action_planner::ActionPlannerState;
 pub use types::*;
 
 pub type AiCoreState = tokio::sync::Mutex<AiEngine>;

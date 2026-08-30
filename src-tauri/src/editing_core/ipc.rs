@@ -38,7 +38,9 @@ pub fn edit_undo(
         .map_err(|e| e.to_string())?;
 
     let mut engine = editing_state.lock().map_err(|e| e.to_string())?;
-    engine.undo(&session_id, &session_arc).map_err(|e| e.to_string())
+    engine
+        .undo(&session_id, &session_arc)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -53,7 +55,9 @@ pub fn edit_redo(
         .map_err(|e| e.to_string())?;
 
     let mut engine = editing_state.lock().map_err(|e| e.to_string())?;
-    engine.redo(&session_id, &session_arc).map_err(|e| e.to_string())
+    engine
+        .redo(&session_id, &session_arc)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

@@ -1,9 +1,7 @@
 use tauri::State;
 
 use crate::annotation_core::{
-    types::{
-        Annotation, AnnotationListResponse, CreateAnnotationRequest, UpdateAnnotationRequest,
-    },
+    types::{Annotation, AnnotationListResponse, CreateAnnotationRequest, UpdateAnnotationRequest},
     AnnotationCoreState,
 };
 use crate::document_core::DocumentCoreState;

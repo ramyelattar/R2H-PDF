@@ -33,10 +33,7 @@ pub async fn ai_get_status(state: State<'_, AiCoreState>) -> Result<AiStatusResp
 }
 
 #[tauri::command]
-pub async fn ai_cancel_task(
-    state: State<'_, AiCoreState>,
-    task_id: String,
-) -> Result<(), String> {
+pub async fn ai_cancel_task(state: State<'_, AiCoreState>, task_id: String) -> Result<(), String> {
     let mut engine = state.lock().await;
     engine.cancel_task(&task_id).map_err(|e| e.to_string())
 }
@@ -44,15 +41,16 @@ pub async fn ai_cancel_task(
 // ── Local AI Runtime Commands ───────────────────────────────────────────────
 
 use crate::ai_core::{
-    LocalAiState,
     local_types::{LocalGenerateRequest, LocalGenerateResult, LocalModelInfo, LocalRuntimeStatus},
+    LocalAiState,
 };
 
 #[tauri::command]
-pub fn ai_list_local_models(
-    state: State<'_, LocalAiState>,
-) -> Result<Vec<LocalModelInfo>, String> {
-    let runtime = state.runtime.lock().map_err(|_| "local AI lock poisoned".to_string())?;
+pub fn ai_list_local_models(state: State<'_, LocalAiState>) -> Result<Vec<LocalModelInfo>, String> {
+    let runtime = state
+        .runtime
+        .lock()
+        .map_err(|_| "local AI lock poisoned".to_string())?;
     Ok(runtime.registry.list_models())
 }
 
@@ -60,7 +58,10 @@ pub fn ai_list_local_models(
 pub fn ai_get_local_runtime_status(
     state: State<'_, LocalAiState>,
 ) -> Result<LocalRuntimeStatus, String> {
-    let runtime = state.runtime.lock().map_err(|_| "local AI lock poisoned".to_string())?;
+    let runtime = state
+        .runtime
+        .lock()
+        .map_err(|_| "local AI lock poisoned".to_string())?;
     Ok(runtime.status())
 }
 
@@ -69,7 +70,10 @@ pub fn ai_validate_local_model(
     state: State<'_, LocalAiState>,
     model_id: String,
 ) -> Result<LocalModelInfo, String> {
-    let runtime = state.runtime.lock().map_err(|_| "local AI lock poisoned".to_string())?;
+    let runtime = state
+        .runtime
+        .lock()
+        .map_err(|_| "local AI lock poisoned".to_string())?;
     runtime.registry.validate_model(&model_id)
 }
 
@@ -78,16 +82,16 @@ pub fn ai_generate_local(
     state: State<'_, LocalAiState>,
     request: LocalGenerateRequest,
 ) -> Result<LocalGenerateResult, String> {
-    let runtime = state.runtime.lock().map_err(|_| "local AI lock poisoned".to_string())?;
+    let runtime = state
+        .runtime
+        .lock()
+        .map_err(|_| "local AI lock poisoned".to_string())?;
     runtime.generate(request)
 }
 
-
 // ── RAG Commands ────────────────────────────────────────────────────────────
 
-use crate::ai_core::rag::{
-    RagState, BuildIndexRequest, RagQuestionRequest, RagAnswerResult,
-};
+use crate::ai_core::rag::{BuildIndexRequest, RagAnswerResult, RagQuestionRequest, RagState};
 use crate::ai_core::vector_index::IndexStatus;
 
 #[tauri::command]
@@ -95,8 +99,14 @@ pub fn ai_build_document_index(
     rag_state: State<'_, RagState>,
     request: BuildIndexRequest,
 ) -> Result<IndexStatus, String> {
-    let mut engine = rag_state.engine.lock().map_err(|_| "RAG lock poisoned".to_string())?;
-    let mut embedding = rag_state.embedding.lock().map_err(|_| "Embedding lock poisoned".to_string())?;
+    let mut engine = rag_state
+        .engine
+        .lock()
+        .map_err(|_| "RAG lock poisoned".to_string())?;
+    let mut embedding = rag_state
+        .embedding
+        .lock()
+        .map_err(|_| "Embedding lock poisoned".to_string())?;
     Ok(engine.build_index(request, Some(&mut *embedding)))
 }
 
@@ -105,7 +115,10 @@ pub fn ai_get_document_index_status(
     rag_state: State<'_, RagState>,
     session_id: String,
 ) -> Result<IndexStatus, String> {
-    let engine = rag_state.engine.lock().map_err(|_| "RAG lock poisoned".to_string())?;
+    let engine = rag_state
+        .engine
+        .lock()
+        .map_err(|_| "RAG lock poisoned".to_string())?;
     Ok(engine.get_index_status(&session_id))
 }
 
@@ -114,7 +127,10 @@ pub fn ai_clear_document_index(
     rag_state: State<'_, RagState>,
     session_id: String,
 ) -> Result<(), String> {
-    let mut engine = rag_state.engine.lock().map_err(|_| "RAG lock poisoned".to_string())?;
+    let mut engine = rag_state
+        .engine
+        .lock()
+        .map_err(|_| "RAG lock poisoned".to_string())?;
     engine.clear_index(&session_id);
     Ok(())
 }
@@ -126,7 +142,10 @@ pub fn ai_search_document_semantic(
     query: String,
     top_k: Option<usize>,
 ) -> Result<Vec<crate::ai_core::vector_index::VectorSearchResult>, String> {
-    let engine = rag_state.engine.lock().map_err(|_| "RAG lock poisoned".to_string())?;
+    let engine = rag_state
+        .engine
+        .lock()
+        .map_err(|_| "RAG lock poisoned".to_string())?;
     // For semantic search without explicit query embedding, use BM25 path.
     Ok(engine.search(&session_id, &query, top_k.unwrap_or(5), None))
 }
@@ -139,12 +158,20 @@ pub fn ai_ask_document_rag(
 ) -> Result<RagAnswerResult, String> {
     crate::license::assert_feature_allowed("rag")?;
 
-    let engine = rag_state.engine.lock().map_err(|_| "RAG lock poisoned".to_string())?;
-    let runtime = local_ai_state.runtime.lock().map_err(|_| "local AI lock poisoned".to_string())?;
-    let embedding = rag_state.embedding.lock().map_err(|_| "Embedding lock poisoned".to_string())?;
+    let engine = rag_state
+        .engine
+        .lock()
+        .map_err(|_| "RAG lock poisoned".to_string())?;
+    let runtime = local_ai_state
+        .runtime
+        .lock()
+        .map_err(|_| "local AI lock poisoned".to_string())?;
+    let embedding = rag_state
+        .embedding
+        .lock()
+        .map_err(|_| "Embedding lock poisoned".to_string())?;
     engine.ask(&request, &runtime, Some(&*embedding))
 }
-
 
 // ── AI Action Planner Commands ──────────────────────────────────────────────
 
@@ -158,10 +185,22 @@ pub fn ai_plan_document_actions(
     local_ai_state: State<'_, LocalAiState>,
     request: PlanActionsRequest,
 ) -> Result<AiActionBatch, String> {
-    let mut planner = planner_state.planner.lock().map_err(|_| "Planner lock poisoned".to_string())?;
-    let rag_engine = rag_state.engine.lock().map_err(|_| "RAG lock poisoned".to_string())?;
-    let runtime = local_ai_state.runtime.lock().map_err(|_| "Local AI lock poisoned".to_string())?;
-    let embedding = rag_state.embedding.lock().map_err(|_| "Embedding lock poisoned".to_string())?;
+    let mut planner = planner_state
+        .planner
+        .lock()
+        .map_err(|_| "Planner lock poisoned".to_string())?;
+    let rag_engine = rag_state
+        .engine
+        .lock()
+        .map_err(|_| "RAG lock poisoned".to_string())?;
+    let runtime = local_ai_state
+        .runtime
+        .lock()
+        .map_err(|_| "Local AI lock poisoned".to_string())?;
+    let embedding = rag_state
+        .embedding
+        .lock()
+        .map_err(|_| "Embedding lock poisoned".to_string())?;
     planner.plan(&request, &rag_engine, &runtime, Some(&*embedding))
 }
 
@@ -170,7 +209,10 @@ pub fn ai_get_action_batch(
     planner_state: State<'_, ActionPlannerState>,
     batch_id: String,
 ) -> Result<Option<AiActionBatch>, String> {
-    let planner = planner_state.planner.lock().map_err(|_| "Planner lock poisoned".to_string())?;
+    let planner = planner_state
+        .planner
+        .lock()
+        .map_err(|_| "Planner lock poisoned".to_string())?;
     Ok(planner.get_batch(&batch_id).cloned())
 }
 
@@ -180,7 +222,10 @@ pub fn ai_accept_action(
     batch_id: String,
     action_id: String,
 ) -> Result<(), String> {
-    let mut planner = planner_state.planner.lock().map_err(|_| "Planner lock poisoned".to_string())?;
+    let mut planner = planner_state
+        .planner
+        .lock()
+        .map_err(|_| "Planner lock poisoned".to_string())?;
     planner.accept_action(&batch_id, &action_id)
 }
 
@@ -190,7 +235,10 @@ pub fn ai_reject_action(
     batch_id: String,
     action_id: String,
 ) -> Result<(), String> {
-    let mut planner = planner_state.planner.lock().map_err(|_| "Planner lock poisoned".to_string())?;
+    let mut planner = planner_state
+        .planner
+        .lock()
+        .map_err(|_| "Planner lock poisoned".to_string())?;
     planner.reject_action(&batch_id, &action_id)
 }
 
@@ -201,11 +249,20 @@ pub fn ai_apply_action_batch(
 ) -> Result<Vec<String>, String> {
     // Mark accepted actions as applied. Returns list of applied action IDs.
     // Actual editor object creation happens on the frontend.
-    let mut planner = planner_state.planner.lock().map_err(|_| "Planner lock poisoned".to_string())?;
-    let batch = planner.batches.get_mut(&batch_id).ok_or("Batch not found")?;
+    let mut planner = planner_state
+        .planner
+        .lock()
+        .map_err(|_| "Planner lock poisoned".to_string())?;
+    let batch = planner
+        .batches
+        .get_mut(&batch_id)
+        .ok_or("Batch not found")?;
     let mut applied_ids = Vec::new();
     for action in &mut batch.actions {
-        if matches!(action.status, crate::ai_core::action_types::AiActionStatus::Accepted) {
+        if matches!(
+            action.status,
+            crate::ai_core::action_types::AiActionStatus::Accepted
+        ) {
             action.status = crate::ai_core::action_types::AiActionStatus::Applied;
             applied_ids.push(action.action_id.clone());
         }
@@ -218,11 +275,13 @@ pub fn ai_clear_action_batch(
     planner_state: State<'_, ActionPlannerState>,
     batch_id: String,
 ) -> Result<(), String> {
-    let mut planner = planner_state.planner.lock().map_err(|_| "Planner lock poisoned".to_string())?;
+    let mut planner = planner_state
+        .planner
+        .lock()
+        .map_err(|_| "Planner lock poisoned".to_string())?;
     planner.clear_batch(&batch_id);
     Ok(())
 }
-
 
 // ── Document Review Commands ────────────────────────────────────────────────
 
@@ -239,18 +298,35 @@ pub fn ai_review_document(
     eng_state: State<'_, crate::engineering::EngineeringState>,
     request: DocumentReviewRequest,
 ) -> Result<DocumentReviewResult, String> {
-    let rag_engine = rag_state.engine.lock().map_err(|_| "RAG lock poisoned".to_string())?;
-    let runtime = local_ai_state.runtime.lock().map_err(|_| "Local AI lock poisoned".to_string())?;
-    let embedding = rag_state.embedding.lock().map_err(|_| "Embedding lock poisoned".to_string())?;
+    let rag_engine = rag_state
+        .engine
+        .lock()
+        .map_err(|_| "RAG lock poisoned".to_string())?;
+    let runtime = local_ai_state
+        .runtime
+        .lock()
+        .map_err(|_| "Local AI lock poisoned".to_string())?;
+    let embedding = rag_state
+        .embedding
+        .lock()
+        .map_err(|_| "Embedding lock poisoned".to_string())?;
 
     let eng_findings = if request.include_engineering {
-        eng_state.findings.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        eng_state
+            .findings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     } else {
         Vec::new()
     };
 
     let result = crate::ai_core::review::run_review(
-        &request, &rag_engine, &runtime, Some(&*embedding), eng_findings,
+        &request,
+        &rag_engine,
+        &runtime,
+        Some(&*embedding),
+        eng_findings,
     )?;
 
     *LAST_REVIEW.lock().unwrap() = Some(result.clone());
@@ -270,7 +346,6 @@ pub fn ai_clear_review_result() -> Result<(), String> {
     *review = None;
     Ok(())
 }
-
 
 // ── Local AI Path / Model Manager Commands ──────────────────────────────────
 

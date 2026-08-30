@@ -241,10 +241,7 @@ pub fn encoding_target_for_base(kind: EncodingKind) -> Option<EncodingTarget> {
 ///
 /// This is the simpler half of the Phase 30B map; layering Differences
 /// on top is handled by `build_with_differences`.
-pub fn build_base_encoding_map(
-    resource_name: &str,
-    kind: EncodingKind,
-) -> EncodingForwardMap {
+pub fn build_base_encoding_map(resource_name: &str, kind: EncodingKind) -> EncodingForwardMap {
     let mut char_to_code: BTreeMap<char, u8> = BTreeMap::new();
     let mut warnings: Vec<String> = Vec::new();
 
@@ -452,7 +449,10 @@ mod tests {
 
     #[test]
     fn differences_apply_eacute_override() {
-        let diffs = vec![DifferencesEntry { code: 0xE9, glyph_name: "eacute".to_string() }];
+        let diffs = vec![DifferencesEntry {
+            code: 0xE9,
+            glyph_name: "eacute".to_string(),
+        }];
         let m = build_with_differences("F1", EncodingKind::WinAnsi, &diffs);
         assert!(matches!(m.source, ForwardMapSource::BasePlusDifferences));
         assert_eq!(m.char_to_code.get(&'é'), Some(&0xE9));
@@ -460,19 +460,30 @@ mod tests {
 
     #[test]
     fn differences_unknown_glyph_name_is_skipped() {
-        let diffs = vec![DifferencesEntry { code: 0xA1, glyph_name: "madeup_glyph".to_string() }];
+        let diffs = vec![DifferencesEntry {
+            code: 0xA1,
+            glyph_name: "madeup_glyph".to_string(),
+        }];
         let m = build_with_differences("F1", EncodingKind::WinAnsi, &diffs);
         assert!(m.warnings.iter().any(|w| w.contains("not recognised")));
         // Did NOT insert anything for the unknown name.
-        assert!(!m.char_to_code.values().any(|&b| b == 0xA1) || m.char_to_code.get(&'¡') == Some(&0xA1));
+        assert!(
+            !m.char_to_code.values().any(|&b| b == 0xA1) || m.char_to_code.get(&'¡') == Some(&0xA1)
+        );
     }
 
     #[test]
     fn ambiguous_differences_marks_char_unsafe() {
         // Map two codes to the same Unicode → ambiguous.
         let diffs = vec![
-            DifferencesEntry { code: 0xA1, glyph_name: "eacute".to_string() },
-            DifferencesEntry { code: 0xA2, glyph_name: "eacute".to_string() },
+            DifferencesEntry {
+                code: 0xA1,
+                glyph_name: "eacute".to_string(),
+            },
+            DifferencesEntry {
+                code: 0xA2,
+                glyph_name: "eacute".to_string(),
+            },
         ];
         let m = build_with_differences("F1", EncodingKind::WinAnsi, &diffs);
         // 'é' is mapped (one of the codes wins), and the other map is
@@ -498,8 +509,14 @@ mod tests {
 
     #[test]
     fn encoding_target_for_base_maps_known_kinds() {
-        assert!(matches!(encoding_target_for_base(EncodingKind::WinAnsi), Some(EncodingTarget::WinAnsi)));
-        assert!(matches!(encoding_target_for_base(EncodingKind::MacRoman), Some(EncodingTarget::MacRoman)));
+        assert!(matches!(
+            encoding_target_for_base(EncodingKind::WinAnsi),
+            Some(EncodingTarget::WinAnsi)
+        ));
+        assert!(matches!(
+            encoding_target_for_base(EncodingKind::MacRoman),
+            Some(EncodingTarget::MacRoman)
+        ));
         assert!(encoding_target_for_base(EncodingKind::IdentityH).is_none());
     }
 }

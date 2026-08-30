@@ -393,7 +393,7 @@ mod tests {
         if root.is_dir() {
             let result = validate_local_ai_root(&root);
             // If local-ai exists, at least some assets should be found.
-            assert!(result.assets.len() > 0);
+            assert!(!result.assets.is_empty());
         }
     }
 

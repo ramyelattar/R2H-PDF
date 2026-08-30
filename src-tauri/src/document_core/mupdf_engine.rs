@@ -17,6 +17,12 @@ use super::vector::{extract_native_vectors, NativeVectorPageResult, NativeVector
 
 pub struct MuPdfEngine;
 
+impl Default for MuPdfEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MuPdfEngine {
     pub fn new() -> Self {
         Self
@@ -24,8 +30,14 @@ impl MuPdfEngine {
 }
 
 impl PdfEngine for MuPdfEngine {
-    fn open(&self, path: &Path, recover_if_damaged: bool) -> Result<OpenedDocument, DocumentCoreError> {
-        if cfg!(debug_assertions) { eprintln!("[document_core] open_pdf start path={}", path.display()); }
+    fn open(
+        &self,
+        path: &Path,
+        recover_if_damaged: bool,
+    ) -> Result<OpenedDocument, DocumentCoreError> {
+        if cfg!(debug_assertions) {
+            eprintln!("[document_core] open_pdf start path={}", path.display());
+        }
         let bytes = std::fs::read(path)?;
 
         let (bytes, repaired, recovery_report) = if bytes.starts_with(b"%PDF-") {
@@ -41,9 +53,12 @@ impl PdfEngine for MuPdfEngine {
         };
 
         let document = open_document_from_bytes(&bytes)?;
-        let page_count = usize::try_from(document.page_count().map_err(map_mupdf_error)?).unwrap_or(0);
+        let page_count =
+            usize::try_from(document.page_count().map_err(map_mupdf_error)?).unwrap_or(0);
         if page_count == 0 {
-            return Err(DocumentCoreError::InvalidPdf("document contains zero pages".to_string()));
+            return Err(DocumentCoreError::InvalidPdf(
+                "document contains zero pages".to_string(),
+            ));
         }
 
         let (pages, is_scanned) = load_page_infos(&document)?;
@@ -89,9 +104,7 @@ impl PdfEngine for MuPdfEngine {
         if cfg!(debug_assertions) {
             eprintln!(
                 "[document_core] render_page start session={} page={} zoom={:.3}",
-                request.session_id,
-                request.page_index,
-                request.zoom
+                request.session_id, request.page_index, request.zoom
             );
         }
 
@@ -105,7 +118,10 @@ impl PdfEngine for MuPdfEngine {
         let start = Instant::now();
         let document = open_document_from_bytes(&doc.bytes)?;
         let page = document
-            .load_page(i32::try_from(request.page_index).map_err(|e| DocumentCoreError::RenderError(e.to_string()))?)
+            .load_page(
+                i32::try_from(request.page_index)
+                    .map_err(|e| DocumentCoreError::RenderError(e.to_string()))?,
+            )
             .map_err(map_mupdf_error)?;
 
         // Capture page bounds in PDF points BEFORE rendering so the frontend
@@ -189,7 +205,10 @@ impl PdfEngine for MuPdfEngine {
 
         let document = open_document_from_bytes(&doc.bytes)?;
         let page = document
-            .load_page(i32::try_from(request.page_index).map_err(|e| DocumentCoreError::TextExtractionError(e.to_string()))?)
+            .load_page(
+                i32::try_from(request.page_index)
+                    .map_err(|e| DocumentCoreError::TextExtractionError(e.to_string()))?,
+            )
             .map_err(map_mupdf_error)?;
         let text_page = page
             .to_text_page(TextPageFlags::PRESERVE_WHITESPACE)
@@ -246,9 +265,9 @@ impl PdfEngine for MuPdfEngine {
             .unwrap_or_else(|| doc.source_path.clone());
 
         let target = Path::new(&target_path);
-        let parent = target
-            .parent()
-            .ok_or_else(|| DocumentCoreError::SaveError("target has no parent directory".to_string()))?;
+        let parent = target.parent().ok_or_else(|| {
+            DocumentCoreError::SaveError("target has no parent directory".to_string())
+        })?;
 
         std::fs::create_dir_all(parent)?;
 
@@ -322,7 +341,10 @@ impl PdfEngine for MuPdfEngine {
         RecoveryManager::recover_file(path)
     }
 
-    fn extract_all_pages_text(&self, doc: &OpenedDocument) -> Result<Vec<String>, DocumentCoreError> {
+    fn extract_all_pages_text(
+        &self,
+        doc: &OpenedDocument,
+    ) -> Result<Vec<String>, DocumentCoreError> {
         // Parse the document once and extract text from all pages in a single
         // call, avoiding the per-page re-parse that plagued the old N-IPC path.
         let document = open_document_from_bytes(&doc.bytes)?;
@@ -483,7 +505,10 @@ fn load_page_infos(document: &MuDocument) -> Result<(Vec<PageInfo>, bool), Docum
 
     for page_index in 0..page_count {
         let page = document
-            .load_page(i32::try_from(page_index).map_err(|e| DocumentCoreError::InvalidPdf(e.to_string()))?)
+            .load_page(
+                i32::try_from(page_index)
+                    .map_err(|e| DocumentCoreError::InvalidPdf(e.to_string()))?,
+            )
             .map_err(map_mupdf_error)?;
         let bounds = page.bounds().map_err(map_mupdf_error)?;
         let has_text = if page_index < 3 {
@@ -633,7 +658,13 @@ fn detect_type_hint(body: &[u8]) -> String {
                 let name_bytes = &rest[1..];
                 let name_end = name_bytes
                     .iter()
-                    .position(|b| b.is_ascii_whitespace() || *b == b'/' || *b == b'>' || *b == b'[' || *b == b'(')
+                    .position(|b| {
+                        b.is_ascii_whitespace()
+                            || *b == b'/'
+                            || *b == b'>'
+                            || *b == b'['
+                            || *b == b'('
+                    })
                     .unwrap_or(name_bytes.len());
                 if let Ok(name) = std::str::from_utf8(&name_bytes[..name_end]) {
                     match name {
@@ -661,7 +692,9 @@ fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
         return None;
     }
 
-    haystack.windows(needle.len()).position(|window| window == needle)
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 fn crc32_hex(bytes: &[u8]) -> String {
@@ -718,7 +751,11 @@ fn collect_fields(
         .get_dict_inheritable("FT")
         .ok()
         .flatten()
-        .and_then(|ft| ft.as_name().ok().map(|b| String::from_utf8_lossy(b).into_owned()))
+        .and_then(|ft| {
+            ft.as_name()
+                .ok()
+                .map(|b| String::from_utf8_lossy(b).into_owned())
+        })
         .map(|ft| match ft.as_str() {
             "Tx" => "text".to_string(),
             "Btn" => {
@@ -747,10 +784,11 @@ fn collect_fields(
         .flatten()
         .and_then(|v| {
             // /V can be a string or a name (e.g. /Yes for checkboxes).
-            v.as_string()
-                .ok()
-                .map(|s| s.to_string())
-                .or_else(|| v.as_name().ok().map(|b| String::from_utf8_lossy(b).into_owned()))
+            v.as_string().ok().map(|s| s.to_string()).or_else(|| {
+                v.as_name()
+                    .ok()
+                    .map(|b| String::from_utf8_lossy(b).into_owned())
+            })
         })
         .unwrap_or_default();
 
@@ -769,10 +807,30 @@ fn collect_fields(
         .ok()
         .flatten()
         .map(|r| {
-            let x0 = r.get_array(0).ok().flatten().and_then(|v| v.as_float().ok()).unwrap_or(0.0);
-            let y0 = r.get_array(1).ok().flatten().and_then(|v| v.as_float().ok()).unwrap_or(0.0);
-            let x1 = r.get_array(2).ok().flatten().and_then(|v| v.as_float().ok()).unwrap_or(0.0);
-            let y1 = r.get_array(3).ok().flatten().and_then(|v| v.as_float().ok()).unwrap_or(0.0);
+            let x0 = r
+                .get_array(0)
+                .ok()
+                .flatten()
+                .and_then(|v| v.as_float().ok())
+                .unwrap_or(0.0);
+            let y0 = r
+                .get_array(1)
+                .ok()
+                .flatten()
+                .and_then(|v| v.as_float().ok())
+                .unwrap_or(0.0);
+            let x1 = r
+                .get_array(2)
+                .ok()
+                .flatten()
+                .and_then(|v| v.as_float().ok())
+                .unwrap_or(0.0);
+            let y1 = r
+                .get_array(3)
+                .ok()
+                .flatten()
+                .and_then(|v| v.as_float().ok())
+                .unwrap_or(0.0);
             [x0, y0, x1, y1]
         })
         .unwrap_or([0.0, 0.0, 0.0, 0.0]);
@@ -816,8 +874,11 @@ mod tests {
     /// guaranteed to be parseable by MuPDF without xref repair issues.
     fn make_valid_one_page_pdf() -> Vec<u8> {
         let mut pdf = PdfDocument::new();
-        pdf.new_page(mupdf::Size { width: 612.0, height: 792.0 })
-            .expect("create blank page");
+        pdf.new_page(mupdf::Size {
+            width: 612.0,
+            height: 792.0,
+        })
+        .expect("create blank page");
         let mut buf: Vec<u8> = Vec::new();
         pdf.write_to(&mut buf).expect("serialize PDF");
         buf
@@ -858,14 +919,24 @@ mod tests {
             session_id: "render-test".to_string(),
             page_index: 0,
             zoom: 1.0,
-            viewport: BBox { x: 0.0, y: 0.0, width: 612.0, height: 792.0 },
+            viewport: BBox {
+                x: 0.0,
+                y: 0.0,
+                width: 612.0,
+                height: 792.0,
+            },
             device_pixel_ratio: 1.0,
         };
 
-        let response = engine.render_page(&doc, &request).expect("render must succeed");
+        let response = engine
+            .render_page(&doc, &request)
+            .expect("render must succeed");
         assert!(response.width_px > 0, "width_px must be > 0");
         assert!(response.height_px > 0, "height_px must be > 0");
-        assert!(!response.pixels_rgba.is_empty(), "pixel buffer must not be empty");
+        assert!(
+            !response.pixels_rgba.is_empty(),
+            "pixel buffer must not be empty"
+        );
         let expected = (response.width_px as usize) * (response.height_px as usize) * 4;
         assert_eq!(
             response.pixels_rgba.len(),
@@ -908,16 +979,21 @@ mod tests {
             session_id: "render-test".to_string(),
             page_index: 99,
             zoom: 1.0,
-            viewport: BBox { x: 0.0, y: 0.0, width: 612.0, height: 792.0 },
+            viewport: BBox {
+                x: 0.0,
+                y: 0.0,
+                width: 612.0,
+                height: 792.0,
+            },
             device_pixel_ratio: 1.0,
         };
 
-        let err = engine.render_page(&doc, &request).expect_err("out-of-range page must error");
+        let err = engine
+            .render_page(&doc, &request)
+            .expect_err("out-of-range page must error");
         assert!(
             matches!(err, DocumentCoreError::PageOutOfRange { .. }),
             "expected PageOutOfRange, got {err:?}",
         );
     }
-
-
 }

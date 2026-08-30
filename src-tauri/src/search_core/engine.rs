@@ -37,11 +37,7 @@ impl SearchEngine {
     }
 
     /// Index a document using plain text only (no span data — bboxes will be zero).
-    pub fn index_document(
-        &mut self,
-        session_id: String,
-        pages: Vec<String>,
-    ) -> IndexStatus {
+    pub fn index_document(&mut self, session_id: String, pages: Vec<String>) -> IndexStatus {
         let total = pages.len();
         let mut page_map = HashMap::new();
         let mut span_map: HashMap<usize, Vec<SpanRecord>> = HashMap::new();
@@ -152,8 +148,7 @@ impl SearchEngine {
         };
 
         // Collect and sort pages.
-        let mut pages: Vec<(usize, &String)> =
-            idx.pages.iter().map(|(k, v)| (*k, v)).collect();
+        let mut pages: Vec<(usize, &String)> = idx.pages.iter().map(|(k, v)| (*k, v)).collect();
         pages.sort_by_key(|(k, _)| *k);
 
         let mut matches: Vec<SearchMatch> = Vec::new();
@@ -271,7 +266,12 @@ fn spans_to_bbox(spans: &[SpanRecord], match_start: usize, match_end: usize) -> 
     if found {
         BBox { x0, y0, x1, y1 }
     } else {
-        BBox { x0: 0.0, y0: 0.0, x1: 0.0, y1: 0.0 }
+        BBox {
+            x0: 0.0,
+            y0: 0.0,
+            x1: 0.0,
+            y1: 0.0,
+        }
     }
 }
 
@@ -415,11 +415,21 @@ mod tests {
         let mut engine = SearchEngine::new();
         engine.index_document(
             "s1".to_string(),
-            vec!["needle on page 0".to_string(), "needle on page 1".to_string()],
+            vec![
+                "needle on page 0".to_string(),
+                "needle on page 1".to_string(),
+            ],
         );
         engine.set_active_page("s1".to_string(), 0);
 
-        let q = make_query("s1", "needle", false, false, false, SearchScope::CurrentPage);
+        let q = make_query(
+            "s1",
+            "needle",
+            false,
+            false,
+            false,
+            SearchScope::CurrentPage,
+        );
         let resp = engine.query(q).unwrap();
         assert_eq!(resp.total, 1);
         assert_eq!(resp.matches[0].page_index, 0);
@@ -434,7 +444,12 @@ mod tests {
         let spans = vec![SpanRecord {
             char_start: 0,
             char_end: 5,
-            bbox: BBox { x0: 10.0, y0: 20.0, x1: 50.0, y1: 30.0 },
+            bbox: BBox {
+                x0: 10.0,
+                y0: 20.0,
+                x1: 50.0,
+                y1: 30.0,
+            },
         }];
         engine.index_document_with_spans(
             "s1".to_string(),

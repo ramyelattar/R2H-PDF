@@ -15,5 +15,5 @@ pub mod text;
 pub mod types;
 pub mod vector;
 
-pub use session::DocumentCoreState;
 pub use ocr::OcrState;
+pub use session::DocumentCoreState;

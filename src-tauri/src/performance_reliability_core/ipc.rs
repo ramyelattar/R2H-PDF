@@ -157,7 +157,9 @@ pub fn perf_create_recovery_checkpoint(
         .lock()
         .map_err(|_| PlatformLayerError::LockPoisoned)
         .map_err(map_error)?;
-    manager.create_recovery_checkpoint(request).map_err(map_error)
+    manager
+        .create_recovery_checkpoint(request)
+        .map_err(map_error)
 }
 
 #[tauri::command]

@@ -132,7 +132,9 @@ impl EditingEngine {
         let operation_label = tx.description.clone();
 
         if snapshot_size >= self.budget.spill_to_disk_threshold {
-            let session_dir = self.snapshot_root.join(sanitize_path_component(&tx.session_id));
+            let session_dir = self
+                .snapshot_root
+                .join(sanitize_path_component(&tx.session_id));
             std::fs::create_dir_all(&session_dir).map_err(|e| {
                 EditingCoreError::SnapshotStorageFailed(format!("create snapshot dir: {e}"))
             })?;
@@ -221,7 +223,8 @@ impl EditingEngine {
                 Self::delete_snapshot(&entry.after_snapshot);
             }
         }
-        let _ = std::fs::remove_dir_all(self.snapshot_root.join(sanitize_path_component(session_id)));
+        let _ =
+            std::fs::remove_dir_all(self.snapshot_root.join(sanitize_path_component(session_id)));
     }
 
     fn usage_for_session(&self, session_id: &str) -> (usize, usize) {
@@ -242,7 +245,11 @@ impl EditingEngine {
 
     fn prune_to_budget(&mut self, session_id: &str) {
         loop {
-            let undo_len = self.undo_stacks.get(session_id).map(|v| v.len()).unwrap_or(0);
+            let undo_len = self
+                .undo_stacks
+                .get(session_id)
+                .map(|v| v.len())
+                .unwrap_or(0);
             let (memory, disk) = self.usage_for_session(session_id);
             let over_budget = undo_len > self.budget.max_undo_entries
                 || memory > self.budget.max_in_memory_bytes
@@ -300,17 +307,18 @@ impl EditingEngine {
             }
         };
 
-        let mut snapshot = match self.create_snapshot(&tx, before_bytes, revision_before, revision_before) {
-            Ok(snapshot) => snapshot,
-            Err(err) => {
-                return EditTransactionResult {
-                    transaction_id,
-                    success: false,
-                    applied_count: 0,
-                    error: Some(err.to_string()),
-                };
-            }
-        };
+        let mut snapshot =
+            match self.create_snapshot(&tx, before_bytes, revision_before, revision_before) {
+                Ok(snapshot) => snapshot,
+                Err(err) => {
+                    return EditTransactionResult {
+                        transaction_id,
+                        success: false,
+                        applied_count: 0,
+                        error: Some(err.to_string()),
+                    };
+                }
+            };
 
         // --- apply each operation ---
         for op in &tx.operations {
@@ -380,9 +388,9 @@ impl EditingEngine {
 
         // Snapshot current bytes as after_bytes for the redo entry.
         let (after_bytes, revision_after) = {
-            let s = session
-                .lock()
-                .map_err(|_| EditingCoreError::TransactionFailed("session lock poisoned".to_string()))?;
+            let s = session.lock().map_err(|_| {
+                EditingCoreError::TransactionFailed("session lock poisoned".to_string())
+            })?;
             (s.document.bytes.clone(), s.document_revision)
         };
 
@@ -394,16 +402,20 @@ impl EditingEngine {
 
         // Restore before_bytes.
         {
-            let mut s = session
-                .lock()
-                .map_err(|_| EditingCoreError::TransactionFailed("session lock poisoned".to_string()))?;
+            let mut s = session.lock().map_err(|_| {
+                EditingCoreError::TransactionFailed("session lock poisoned".to_string())
+            })?;
             s.document.bytes = before_bytes;
             s.is_dirty = true;
             s.invalidate_cached_document();
         }
 
-        let redo_snapshot =
-            self.create_snapshot(&entry.tx, after_bytes, entry.before_snapshot.descriptor.revision_before, revision_after)?;
+        let redo_snapshot = self.create_snapshot(
+            &entry.tx,
+            after_bytes,
+            entry.before_snapshot.descriptor.revision_before,
+            revision_after,
+        )?;
 
         // Push redo entry.
         self.redo_stacks
@@ -446,9 +458,9 @@ impl EditingEngine {
 
         // Snapshot current bytes as before_bytes for the new undo entry.
         let (before_bytes, revision_before) = {
-            let s = session
-                .lock()
-                .map_err(|_| EditingCoreError::TransactionFailed("session lock poisoned".to_string()))?;
+            let s = session.lock().map_err(|_| {
+                EditingCoreError::TransactionFailed("session lock poisoned".to_string())
+            })?;
             (s.document.bytes.clone(), s.document_revision)
         };
 
@@ -460,9 +472,9 @@ impl EditingEngine {
 
         // Restore after_bytes (the post-apply state).
         {
-            let mut s = session
-                .lock()
-                .map_err(|_| EditingCoreError::TransactionFailed("session lock poisoned".to_string()))?;
+            let mut s = session.lock().map_err(|_| {
+                EditingCoreError::TransactionFailed("session lock poisoned".to_string())
+            })?;
             s.document.bytes = after_bytes;
             s.is_dirty = true;
             s.invalidate_cached_document();
@@ -542,10 +554,7 @@ impl EditingEngine {
 /// Text operations (InsertText, DeleteText, ReplaceText, Redact) are
 /// implemented here using the MuPDF Rust bindings.  Page and form operations
 /// are handled in tasks 26-27.
-fn apply_mupdf_op(
-    op: &EditOperation,
-    session: &Arc<Mutex<DocumentSession>>,
-) -> Result<(), String> {
+fn apply_mupdf_op(op: &EditOperation, session: &Arc<Mutex<DocumentSession>>) -> Result<(), String> {
     match op.op_type {
         EditOperationType::InsertText => {
             let payload: InsertTextPayload = serde_json::from_str(&op.payload_json)
@@ -698,8 +707,8 @@ fn load_pdf_page(pdf: &PdfDocument, page_index: usize) -> Result<PdfPage, String
             "PAGE_OUT_OF_RANGE: requested page {page_index}, document has {page_count} pages"
         ));
     }
-    let page_no = i32::try_from(page_index)
-        .map_err(|e| format!("page index conversion error: {e}"))?;
+    let page_no =
+        i32::try_from(page_index).map_err(|e| format!("page index conversion error: {e}"))?;
     let fz_page = pdf
         .load_page(page_no)
         .map_err(|e| format!("load_page error: {e}"))?;
@@ -750,9 +759,7 @@ fn apply_insert_text(
             .get_dict("Annots")
             .map_err(|e| format!("get Annots error: {e}"))?
         {
-            let len = annots
-                .len()
-                .map_err(|e| format!("Annots len error: {e}"))?;
+            let len = annots.len().map_err(|e| format!("Annots len error: {e}"))?;
             if len > 0 {
                 if let Some(mut last_annot) = annots
                     .get_array(i32::try_from(len - 1).unwrap_or(0))
@@ -860,8 +867,7 @@ fn apply_redact_rect(
         drop(annot);
 
         // Apply all redact annotations on this page.
-        page.redact()
-            .map_err(|e| format!("redact error: {e}"))?;
+        page.redact().map_err(|e| format!("redact error: {e}"))?;
 
         Ok(())
     })
@@ -918,7 +924,9 @@ where
         let page_no = i32::try_from(i).unwrap_or(0);
         let (width, height, rotation) = if let Ok(fz_page) = updated_pdf.load_page(page_no) {
             if let Ok(pdf_page) = PdfPage::try_from(fz_page) {
-                let bounds = pdf_page.bounds().unwrap_or(mupdf::Rect::new(0.0, 0.0, 612.0, 792.0));
+                let bounds = pdf_page
+                    .bounds()
+                    .unwrap_or(mupdf::Rect::new(0.0, 0.0, 612.0, 792.0));
                 let rot = pdf_page.rotation().unwrap_or(0);
                 (bounds.width(), bounds.height(), rot)
             } else {
@@ -1082,8 +1090,8 @@ fn apply_move_page(
 
     let from = i32::try_from(payload.from_index)
         .map_err(|e| format!("from_index conversion error: {e}"))?;
-    let to = i32::try_from(payload.to_index)
-        .map_err(|e| format!("to_index conversion error: {e}"))?;
+    let to =
+        i32::try_from(payload.to_index).map_err(|e| format!("to_index conversion error: {e}"))?;
 
     with_pdf_document_and_sync_pages(session, |pdf| {
         // Re-validate inside the closure.
@@ -1168,9 +1176,7 @@ fn apply_fill_form_field(
 ) -> Result<(), String> {
     with_pdf_document(session, |pdf| {
         // Locate the AcroForm /Fields array.
-        let trailer = pdf
-            .trailer()
-            .map_err(|e| format!("trailer error: {e}"))?;
+        let trailer = pdf.trailer().map_err(|e| format!("trailer error: {e}"))?;
 
         let root = trailer
             .get_dict("Root")
@@ -1222,10 +1228,7 @@ fn fill_field_recursive(
         };
 
         // Resolve indirect reference so we can read/write the actual dict.
-        let mut resolved = match field
-            .resolve()
-            .map_err(|e| format!("resolve error: {e}"))?
-        {
+        let mut resolved = match field.resolve().map_err(|e| format!("resolve error: {e}"))? {
             Some(r) => r,
             None => continue,
         };
@@ -1314,9 +1317,7 @@ fn apply_add_signature_field(
             .map_err(|e| format!("get Annots error: {e}"))?
             .ok_or_else(|| "page has no /Annots after widget creation".to_string())?;
 
-        let annots_len = annots
-            .len()
-            .map_err(|e| format!("Annots len error: {e}"))?;
+        let annots_len = annots.len().map_err(|e| format!("Annots len error: {e}"))?;
 
         if annots_len == 0 {
             return Err("Annots array is empty after widget creation".to_string());
@@ -1349,8 +1350,8 @@ fn apply_add_signature_field(
             .map_err(|e| format!("dict_put T error: {e}"))?;
 
         // /Ff 0 â€” no special field flags
-        let ff_val = mupdf::pdf::PdfObject::new_int(0)
-            .map_err(|e| format!("new_int Ff error: {e}"))?;
+        let ff_val =
+            mupdf::pdf::PdfObject::new_int(0).map_err(|e| format!("new_int Ff error: {e}"))?;
         widget_obj
             .dict_put("Ff", ff_val)
             .map_err(|e| format!("dict_put Ff error: {e}"))?;
@@ -1368,9 +1369,7 @@ fn ensure_acroform_field(
     pdf: &mut PdfDocument,
     field_ref: mupdf::pdf::PdfObject,
 ) -> Result<(), String> {
-    let trailer = pdf
-        .trailer()
-        .map_err(|e| format!("trailer error: {e}"))?;
+    let trailer = pdf.trailer().map_err(|e| format!("trailer error: {e}"))?;
 
     let mut root = trailer
         .get_dict("Root")
@@ -1435,9 +1434,7 @@ mod tests {
         render::RenderPipeline,
         session::DocumentSession,
         text::TextExtractionPipeline,
-        types::{
-            DocumentSummary, PageInfo, SessionPermissions, ViewportState,
-        },
+        types::{DocumentSummary, PageInfo, SessionPermissions, ViewportState},
     };
     use crate::editing_core::{
         errors::EditingCoreError,
@@ -1565,11 +1562,7 @@ startxref\n190\n%%EOF";
     }
 
     fn snapshot_root(name: &str) -> std::path::PathBuf {
-        std::env::temp_dir().join(format!(
-            "r2h_undo_test_{}_{}",
-            std::process::id(),
-            name
-        ))
+        std::env::temp_dir().join(format!("r2h_undo_test_{}_{}", std::process::id(), name))
     }
 
     // -----------------------------------------------------------------------
@@ -1592,8 +1585,14 @@ startxref\n190\n%%EOF";
 
         // Undo stack should have exactly one entry.
         let state = engine.undo_redo_state(session_id);
-        assert_eq!(state.undo_depth, 1, "undo stack should have 1 entry after apply");
-        assert_eq!(state.redo_depth, 0, "redo stack should be empty after apply");
+        assert_eq!(
+            state.undo_depth, 1,
+            "undo stack should have 1 entry after apply"
+        );
+        assert_eq!(
+            state.redo_depth, 0,
+            "redo stack should be empty after apply"
+        );
     }
 
     #[test]
@@ -1601,13 +1600,18 @@ startxref\n190\n%%EOF";
         let session_id = "small-memory";
         let session = make_session(session_id);
         let root = snapshot_root("small_memory");
-        let mut engine =
-            EditingEngine::with_budget_for_tests(test_budget(1024 * 1024, 1024 * 1024, 100, 4096), root);
+        let mut engine = EditingEngine::with_budget_for_tests(
+            test_budget(1024 * 1024, 1024 * 1024, 100, 4096),
+            root,
+        );
 
         let result = engine.apply_transaction(make_noop_tx(session_id, "tx-small"), &session);
         assert!(result.success);
         let state = engine.undo_redo_state(session_id);
-        assert_eq!(state.latest_snapshot_tier, Some(SnapshotStorageTier::Memory));
+        assert_eq!(
+            state.latest_snapshot_tier,
+            Some(SnapshotStorageTier::Memory)
+        );
         assert!(state.in_memory_undo_bytes > 0);
         assert_eq!(state.disk_backed_undo_bytes, 0);
         engine.clear_session(session_id);
@@ -1619,8 +1623,10 @@ startxref\n190\n%%EOF";
         let large_bytes = vec![b'%'; 8192];
         let session = make_session_with_bytes(session_id, large_bytes.clone());
         let root = snapshot_root("large_disk");
-        let mut engine =
-            EditingEngine::with_budget_for_tests(test_budget(1024, 1024 * 1024, 100, 1024), root.clone());
+        let mut engine = EditingEngine::with_budget_for_tests(
+            test_budget(1024, 1024 * 1024, 100, 1024),
+            root.clone(),
+        );
 
         let result = engine.apply_transaction(make_noop_tx(session_id, "tx-large"), &session);
         assert!(result.success);
@@ -1640,8 +1646,10 @@ startxref\n190\n%%EOF";
         let session_id = "prune";
         let session = make_session(session_id);
         let root = snapshot_root("prune");
-        let mut engine =
-            EditingEngine::with_budget_for_tests(test_budget(1024 * 1024, 1024 * 1024, 2, 4096), root);
+        let mut engine = EditingEngine::with_budget_for_tests(
+            test_budget(1024 * 1024, 1024 * 1024, 2, 4096),
+            root,
+        );
 
         for index in 0..4 {
             let result = engine.apply_transaction(
@@ -1664,13 +1672,23 @@ startxref\n190\n%%EOF";
         let session_id = "redo-clear";
         let session = make_session_with_bytes(session_id, vec![b'a'; 4096]);
         let root = snapshot_root("redo_clear");
-        let mut engine =
-            EditingEngine::with_budget_for_tests(test_budget(1024, 1024 * 1024, 100, 1024), root.clone());
+        let mut engine = EditingEngine::with_budget_for_tests(
+            test_budget(1024, 1024 * 1024, 100, 1024),
+            root.clone(),
+        );
 
-        assert!(engine.apply_transaction(make_noop_tx(session_id, "tx-a"), &session).success);
+        assert!(
+            engine
+                .apply_transaction(make_noop_tx(session_id, "tx-a"), &session)
+                .success
+        );
         engine.undo(session_id, &session).unwrap();
         assert_eq!(engine.undo_redo_state(session_id).redo_depth, 1);
-        assert!(engine.apply_transaction(make_noop_tx(session_id, "tx-b"), &session).success);
+        assert!(
+            engine
+                .apply_transaction(make_noop_tx(session_id, "tx-b"), &session)
+                .success
+        );
         assert_eq!(engine.undo_redo_state(session_id).redo_depth, 0);
 
         engine.clear_session(session_id);
@@ -1685,14 +1703,25 @@ startxref\n190\n%%EOF";
         let mut engine =
             EditingEngine::with_budget_for_tests(test_budget(1024, 1024 * 1024, 100, 1024), root);
 
-        assert!(engine.apply_transaction(make_noop_tx(session_id, "tx-missing"), &session).success);
-        if let Some(entry) = engine.undo_stacks.get(session_id).and_then(|stack| stack.last()) {
+        assert!(
+            engine
+                .apply_transaction(make_noop_tx(session_id, "tx-missing"), &session)
+                .success
+        );
+        if let Some(entry) = engine
+            .undo_stacks
+            .get(session_id)
+            .and_then(|stack| stack.last())
+        {
             if let Some(path) = &entry.before_snapshot.descriptor.disk_path {
                 std::fs::remove_file(path).unwrap();
             }
         }
         let result = engine.undo(session_id, &session);
-        assert!(matches!(result, Err(EditingCoreError::SnapshotUnavailable(_))));
+        assert!(matches!(
+            result,
+            Err(EditingCoreError::SnapshotUnavailable(_))
+        ));
         engine.clear_session(session_id);
     }
 
@@ -1705,9 +1734,14 @@ startxref\n190\n%%EOF";
             EditingEngine::with_budget_for_tests(test_budget(2048, 128 * 1024, 100, 1024), root);
 
         for index in 0..30 {
-            assert!(engine
-                .apply_transaction(make_noop_tx(session_id, &format!("tx-stress-{index}")), &session)
-                .success);
+            assert!(
+                engine
+                    .apply_transaction(
+                        make_noop_tx(session_id, &format!("tx-stress-{index}")),
+                        &session
+                    )
+                    .success
+            );
         }
 
         let state = engine.undo_redo_state(session_id);
@@ -1738,7 +1772,11 @@ startxref\n190\n%%EOF";
 
         // Undo.
         let undo_result = engine.undo(session_id, &session);
-        assert!(undo_result.is_ok(), "undo should succeed: {:?}", undo_result);
+        assert!(
+            undo_result.is_ok(),
+            "undo should succeed: {:?}",
+            undo_result
+        );
 
         // Bytes should be restored to the pre-apply snapshot.
         let restored_bytes = session.lock().unwrap().document.bytes.clone();
@@ -1772,11 +1810,17 @@ startxref\n190\n%%EOF";
         let post_apply_bytes = session.lock().unwrap().document.bytes.clone();
 
         // Undo.
-        engine.undo(session_id, &session).expect("undo should succeed");
+        engine
+            .undo(session_id, &session)
+            .expect("undo should succeed");
 
         // Redo.
         let redo_result = engine.redo(session_id, &session);
-        assert!(redo_result.is_ok(), "redo should succeed: {:?}", redo_result);
+        assert!(
+            redo_result.is_ok(),
+            "redo should succeed: {:?}",
+            redo_result
+        );
 
         // Bytes should match the post-apply snapshot.
         let after_redo_bytes = session.lock().unwrap().document.bytes.clone();
@@ -1806,7 +1850,9 @@ startxref\n190\n%%EOF";
         // We do this by applying then undoing once, leaving an empty undo stack.
         let tx = make_noop_tx(session_id, "tx-4a");
         engine.apply_transaction(tx, &session);
-        engine.undo(session_id, &session).expect("first undo should succeed");
+        engine
+            .undo(session_id, &session)
+            .expect("first undo should succeed");
 
         // Now the undo stack is empty â€” a second undo should fail.
         let result = engine.undo(session_id, &session);
@@ -1831,8 +1877,12 @@ startxref\n190\n%%EOF";
         // Apply, undo (fills redo), then redo (empties redo).
         let tx = make_noop_tx(session_id, "tx-5a");
         engine.apply_transaction(tx, &session);
-        engine.undo(session_id, &session).expect("undo should succeed");
-        engine.redo(session_id, &session).expect("first redo should succeed");
+        engine
+            .undo(session_id, &session)
+            .expect("undo should succeed");
+        engine
+            .redo(session_id, &session)
+            .expect("first redo should succeed");
 
         // Now the redo stack is empty â€” a second redo should fail.
         let result = engine.redo(session_id, &session);

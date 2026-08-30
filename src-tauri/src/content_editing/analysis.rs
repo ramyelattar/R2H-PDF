@@ -1,9 +1,9 @@
 //! Content stream analysis: extracts text spans, image XObjects, and paths
 //! from a PDF page's content stream using MuPDF's structured text extraction.
 
-use mupdf::text_page::TextBlockType;
-use crate::document_core::DocumentCoreState;
 use super::types::*;
+use crate::document_core::DocumentCoreState;
+use mupdf::text_page::TextBlockType;
 
 /// Threshold above which a decoded text line is considered "garbled" by the
 /// quality heuristic — i.e. so many U+FFFD replacement characters or other
@@ -48,10 +48,7 @@ pub fn assess_decoding_quality(text: &str) -> DecodingQuality {
         // ToUnicode / encoding decode. The C1 control range and Private
         // Use Area also count: those are what shows up when a font uses
         // unmapped glyph indices.
-        if c == '\u{FFFD}'
-            || (0x0080..=0x009F).contains(&cp)
-            || (0xE000..=0xF8FF).contains(&cp)
-        {
+        if c == '\u{FFFD}' || (0x0080..=0x009F).contains(&cp) || (0xE000..=0xF8FF).contains(&cp) {
             bad += 1;
         }
     }
@@ -71,9 +68,13 @@ pub fn extract_page_content_objects(
     session_id: &str,
     page_index: usize,
 ) -> Result<Vec<ContentObject>, String> {
-    let arc = doc_state.store.get_session_arc_pub(session_id)
+    let arc = doc_state
+        .store
+        .get_session_arc_pub(session_id)
         .map_err(|e| e.to_string())?;
-    let session = arc.lock().map_err(|_| "session lock poisoned".to_string())?;
+    let session = arc
+        .lock()
+        .map_err(|_| "session lock poisoned".to_string())?;
 
     let pdf = mupdf::pdf::PdfDocument::from_bytes(&session.document.bytes)
         .map_err(|e| format!("Failed to open PDF: {e}"))?;
@@ -81,10 +82,15 @@ pub fn extract_page_content_objects(
     let page_count = pdf.page_count().map_err(|e| format!("page_count: {e}"))?;
     let page_no = i32::try_from(page_index).map_err(|e| format!("page index: {e}"))?;
     if page_no >= page_count {
-        return Err(format!("Page index {} out of range (total: {})", page_index, page_count));
+        return Err(format!(
+            "Page index {} out of range (total: {})",
+            page_index, page_count
+        ));
     }
 
-    let page = pdf.load_page(page_no).map_err(|e| format!("load_page: {e}"))?;
+    let page = pdf
+        .load_page(page_no)
+        .map_err(|e| format!("load_page: {e}"))?;
     // Capture page bounds in PDF points so we can flip Y coordinates from
     // MuPDF's text-page convention (origin top-left, Y down) to the PDF
     // user-space convention used by the rest of the app (origin bottom-left,
@@ -95,12 +101,14 @@ pub fn extract_page_content_objects(
     // Phase 25E: request vector block collection so simple paths
     // (rectangles, lines, filled/stroked shapes) appear alongside text and
     // image blocks. Without this flag MuPDF discards vector geometry.
-    let text_page = page.to_text_page(mupdf::TextPageFlags::COLLECT_VECTORS)
+    let text_page = page
+        .to_text_page(mupdf::TextPageFlags::COLLECT_VECTORS)
         .map_err(|e| format!("to_text_page: {e}"))?;
 
     let mut objects: Vec<ContentObject> = Vec::new();
     let mut z_index = 0;
-    let mut text_occurrence_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut text_occurrence_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
 
     for block in text_page.blocks() {
         match block.r#type() {
@@ -132,12 +140,7 @@ pub fn extract_page_content_objects(
                     // hit-test overlay — expects PDF user-space (Y up,
                     // origin bottom-left). Flip Y here so all downstream
                     // consumers can use the same coordinate system.
-                    let bbox = [
-                        bounds.x0,
-                        page_h - bounds.y1,
-                        bounds.x1,
-                        page_h - bounds.y0,
-                    ];
+                    let bbox = [bounds.x0, page_h - bounds.y1, bounds.x1, page_h - bounds.y0];
 
                     // Track occurrence index for repeated text.
                     let occurrence = text_occurrence_counts.entry(text.clone()).or_insert(0);
@@ -166,7 +169,12 @@ pub fn extract_page_content_objects(
                         );
                     }
 
-                    let id = format!("co-{}-{}-text-{}", &session_id[..session_id.len().min(8)], page_index, z_index);
+                    let id = format!(
+                        "co-{}-{}-text-{}",
+                        &session_id[..session_id.len().min(8)],
+                        page_index,
+                        z_index
+                    );
 
                     // Phase 28A — pick a granular editability strategy
                     // matching the EditableLevel classifier output.
@@ -176,14 +184,15 @@ pub fn extract_page_content_objects(
                         EditableLevel::VisualPatchOnly => "safe_visual_replacement".to_string(),
                         EditableLevel::ReadOnly => "read_only".to_string(),
                     };
-                    let mut unsupported_reason = if editable_level == EditableLevel::VisualPatchOnly {
+                    let mut unsupported_reason = if editable_level == EditableLevel::VisualPatchOnly
+                    {
                         diagnostics.clone()
                     } else {
                         Vec::new()
                     };
                     if quality == DecodingQuality::Garbled {
                         unsupported_reason.push(
-                            "Decoded text identity unreliable; native edit refused.".to_string()
+                            "Decoded text identity unreliable; native edit refused.".to_string(),
                         );
                     }
 
@@ -247,12 +256,17 @@ pub fn extract_page_content_objects(
                     let bbox = [x0, y0, x1, y1];
 
                     let (width, height) = if let Some(img) = block.image() {
-                        (img.width() as u32, img.height() as u32)
+                        (img.width(), img.height())
                     } else {
                         (0, 0)
                     };
 
-                    let id = format!("co-{}-{}-img-{}", &session_id[..session_id.len().min(8)], page_index, z_index);
+                    let id = format!(
+                        "co-{}-{}-img-{}",
+                        &session_id[..session_id.len().min(8)],
+                        page_index,
+                        z_index
+                    );
 
                     objects.push(ContentObject {
                         id,
@@ -270,8 +284,12 @@ pub fn extract_page_content_objects(
                             color_space: "DeviceRGB".to_string(),
                             bits_per_component: 8,
                             transform_matrix: [
-                                transform.a, transform.b, transform.c,
-                                transform.d, transform.e, transform.f,
+                                transform.a,
+                                transform.b,
+                                transform.c,
+                                transform.d,
+                                transform.e,
+                                transform.f,
                             ],
                         }),
                         style_info: Some(StyleInfo {
@@ -295,12 +313,7 @@ pub fn extract_page_content_objects(
                 // Same Y-flip as text spans: MuPDF reports text-page bounds
                 // with Y down, the rest of the app uses PDF user-space Y up.
                 let bounds = block.bounds();
-                let bbox = [
-                    bounds.x0,
-                    page_h - bounds.y1,
-                    bounds.x1,
-                    page_h - bounds.y0,
-                ];
+                let bbox = [bounds.x0, page_h - bounds.y1, bounds.x1, page_h - bounds.y0];
                 let width = (bbox[2] - bbox[0]).abs();
                 let height = (bbox[3] - bbox[1]).abs();
                 // Heuristic shape classification — fully honest, just based
@@ -379,17 +392,25 @@ pub fn classify_path_object(width: f32, height: f32) -> (&'static str, Vec<Strin
 /// Classify text editability.
 fn classify_text_editability(text: &str, _font_size: f32) -> (EditableLevel, Vec<String>) {
     let mut diagnostics = Vec::new();
-    let has_non_ascii = text.chars().any(|c| !c.is_ascii());
+    let has_non_ascii = !text.is_ascii();
 
     if has_non_ascii {
-        diagnostics.push("Contains non-ASCII characters. Native editing may require font verification.".to_string());
+        diagnostics.push(
+            "Contains non-ASCII characters. Native editing may require font verification."
+                .to_string(),
+        );
         // Still allow editing for common extended Latin, but flag CJK as visual-patch-only.
         let has_cjk = text.chars().any(|c| {
             let cp = c as u32;
-            (0x4E00..=0x9FFF).contains(&cp) || (0x3040..=0x30FF).contains(&cp) || (0xAC00..=0xD7AF).contains(&cp)
+            (0x4E00..=0x9FFF).contains(&cp)
+                || (0x3040..=0x30FF).contains(&cp)
+                || (0xAC00..=0xD7AF).contains(&cp)
         });
         if has_cjk {
-            diagnostics.push("CJK text detected. Native editing not safe without font embedding verification.".to_string());
+            diagnostics.push(
+                "CJK text detected. Native editing not safe without font embedding verification."
+                    .to_string(),
+            );
             return (EditableLevel::VisualPatchOnly, diagnostics);
         }
     }
@@ -427,8 +448,12 @@ mod tests {
     fn classify_thin_path_as_line() {
         let (hint, diag) = classify_path_object(100.0, 0.2);
         assert_eq!(hint, "line_or_thin_path");
-        assert!(diag.iter().any(|d| d.contains("Vector point editing is not implemented")),
-            "expected honest editability disclaimer, got {:?}", diag);
+        assert!(
+            diag.iter()
+                .any(|d| d.contains("Vector point editing is not implemented")),
+            "expected honest editability disclaimer, got {:?}",
+            diag
+        );
     }
 
     #[test]
@@ -458,7 +483,7 @@ mod tests {
     #[test]
     fn decoding_quality_garbled_for_replacement_chars() {
         // String of 12 U+FFFD characters — entirely garbage.
-        let s: String = std::iter::repeat('\u{FFFD}').take(12).collect();
+        let s: String = std::iter::repeat_n('\u{FFFD}', 12).collect();
         assert_eq!(assess_decoding_quality(&s), DecodingQuality::Garbled);
     }
 
@@ -466,14 +491,14 @@ mod tests {
     fn decoding_quality_garbled_for_pua_dump() {
         // Private Use Area is what shows up when MuPDF maps an unmapped
         // glyph index 1:1 — looks like a real character but isn't.
-        let s: String = std::iter::repeat('\u{E000}').take(10).collect();
+        let s: String = std::iter::repeat_n('\u{E000}', 10).collect();
         assert_eq!(assess_decoding_quality(&s), DecodingQuality::Garbled);
     }
 
     #[test]
     fn decoding_quality_partial_for_one_bad_char_in_long_string() {
         // Long enough that 1 bad char is below the 20% threshold.
-        let s = format!("Hello world from the encoder \u{FFFD}");
+        let s = "Hello world from the encoder \u{FFFD}".to_string();
         assert_eq!(assess_decoding_quality(&s), DecodingQuality::Partial);
     }
 

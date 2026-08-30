@@ -8,44 +8,43 @@ mod editing_core;
 mod engineering;
 pub mod license;
 mod performance_reliability_core;
+mod project_persistence;
+mod release_smoke;
 mod reports;
 mod search_core;
-mod release_smoke;
-mod project_persistence;
 mod shell_persistence;
 
+use ai_core::ActionPlannerState;
 use ai_core::AiEngine;
 use ai_core::LocalAiState;
 use ai_core::RagState;
-use ai_core::ActionPlannerState;
 use annotation_core::{AnnotationCoreState, AnnotationEngine};
-use document_core::ipc::{
-    close_session, doc_close, doc_diagnostics, doc_extract_all_text, doc_extract_text,
-    doc_incremental_save, doc_navigate, doc_open, doc_recover, doc_render, doc_list_form_fields,
-    get_session_state, go_to_page, open_pdf, render_page, set_zoom,
-    ocr_check_availability, ocr_get_status, ocr_cancel, ocr_has_result, ocr_get_page_text,
-    ocr_run_page, ocr_get_all_texts,
-    pdf_create_form_field, pdf_delete_form_field, pdf_update_form_field_properties,
-    pdf_compare_documents, pdf_get_compare_result, pdf_clear_compare_result,
-    report_export_compare_review, ai_review_compare_result,
-    pdf_create_ocr_editable_overlays, pdf_create_ocr_text_layer,
-};
 use document_core::compare::CompareState;
 use document_core::export::doc_export;
+use document_core::ipc::{
+    ai_review_compare_result, close_session, doc_close, doc_diagnostics, doc_extract_all_text,
+    doc_extract_text, doc_incremental_save, doc_list_form_fields, doc_navigate, doc_open,
+    doc_recover, doc_render, get_session_state, go_to_page, ocr_cancel, ocr_check_availability,
+    ocr_get_all_texts, ocr_get_page_text, ocr_get_status, ocr_has_result, ocr_run_page, open_pdf,
+    pdf_clear_compare_result, pdf_compare_documents, pdf_create_form_field,
+    pdf_create_ocr_editable_overlays, pdf_create_ocr_text_layer, pdf_delete_form_field,
+    pdf_get_compare_result, pdf_update_form_field_properties, render_page,
+    report_export_compare_review, set_zoom,
+};
 use document_core::DocumentCoreState;
 use document_core::OcrState;
 use editing_core::{EditingCoreState, EditingEngine};
 use license::license_get_status;
 use performance_reliability_core::ipc::{
-    perf_complete_job, perf_create_recovery_checkpoint, perf_diagnostics,
-    perf_evaluate_memory, perf_get_benchmark_plan, perf_get_memory_model,
-    perf_get_recovery_architecture, perf_get_strategy, perf_get_test_corpus_strategy,
-    perf_list_jobs, perf_mark_job_running, perf_record_autosave, perf_restore_after_crash,
-    perf_schedule_job, perf_submit_benchmark_result, perf_validate_autosave,
+    perf_complete_job, perf_create_recovery_checkpoint, perf_diagnostics, perf_evaluate_memory,
+    perf_get_benchmark_plan, perf_get_memory_model, perf_get_recovery_architecture,
+    perf_get_strategy, perf_get_test_corpus_strategy, perf_list_jobs, perf_mark_job_running,
+    perf_record_autosave, perf_restore_after_crash, perf_schedule_job,
+    perf_submit_benchmark_result, perf_validate_autosave,
 };
 use performance_reliability_core::PerformanceReliabilityState;
-use search_core::{SearchCoreState, SearchEngine};
 use project_persistence::{project_load, project_save};
+use search_core::{SearchCoreState, SearchEngine};
 use shell_persistence::{
     library_load, library_record_export, library_record_open, library_record_project,
     library_record_review,
@@ -233,7 +232,11 @@ pub fn run_license_smoke_cli(mode: &str) -> i32 {
                 }
                 Err(err) => eprintln!("license smoke report serialization failed: {err}"),
             }
-            if report.status == "PASS" { 0 } else { 1 }
+            if report.status == "PASS" {
+                0
+            } else {
+                1
+            }
         }
         Err(err) => {
             eprintln!("license smoke failed: {err}");

@@ -6,7 +6,10 @@ use super::types::RecoveryReport;
 pub struct RecoveryManager;
 
 impl RecoveryManager {
-    pub fn recover_pdf_bytes(path: &Path, original_bytes: &[u8]) -> Result<(Vec<u8>, RecoveryReport), DocumentCoreError> {
+    pub fn recover_pdf_bytes(
+        path: &Path,
+        original_bytes: &[u8],
+    ) -> Result<(Vec<u8>, RecoveryReport), DocumentCoreError> {
         let mut warnings = Vec::new();
 
         let header_pos = find_subsequence(original_bytes, b"%PDF-");
@@ -53,7 +56,9 @@ fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
         return None;
     }
 
-    haystack.windows(needle.len()).position(|window| window == needle)
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 fn find_last_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {

@@ -287,8 +287,8 @@ impl HostRuntime {
     }
 
     fn extract_native_vectors(&self, params: &Value) -> Result<Value, &'static str> {
-        let params: VectorParams = serde_json::from_value(params.clone())
-            .map_err(|_| "VECTOR_INPUT_INVALID")?;
+        let params: VectorParams =
+            serde_json::from_value(params.clone()).map_err(|_| "VECTOR_INPUT_INVALID")?;
         if params.profile_version != VECTOR_PROFILE_ID {
             return Err("VECTOR_INPUT_INVALID");
         }

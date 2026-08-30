@@ -61,10 +61,7 @@ impl AiEngine {
                         backend: AiModelBackend::LocalOllama,
                         models: Vec::new(),
                         active_tasks: self.active_tasks.len(),
-                        error: Some(format!(
-                            "Ollama returned status {}",
-                            response.status()
-                        )),
+                        error: Some(format!("Ollama returned status {}", response.status())),
                     };
                 }
 
@@ -124,7 +121,8 @@ impl AiEngine {
         let handle = tokio::spawn(Self::execute_task(client, endpoint, req));
 
         // Store the abort handle keyed by task_id
-        self.active_tasks.insert(task_id.clone(), handle.abort_handle());
+        self.active_tasks
+            .insert(task_id.clone(), handle.abort_handle());
 
         // Await the spawned task
         let result = handle.await;
@@ -138,7 +136,10 @@ impl AiEngine {
                 if join_err.is_cancelled() {
                     Err(AiCoreError::TaskFailed("Task was cancelled".to_string()))
                 } else {
-                    Err(AiCoreError::TaskFailed(format!("Task panicked: {}", join_err)))
+                    Err(AiCoreError::TaskFailed(format!(
+                        "Task panicked: {}",
+                        join_err
+                    )))
                 }
             }
         }
@@ -170,7 +171,8 @@ impl AiEngine {
         }
 
         let prompt = Self::build_prompt(&req);
-        let generated_text = Self::call_generate_async(&client, &endpoint, &req.model, &prompt).await?;
+        let generated_text =
+            Self::call_generate_async(&client, &endpoint, &req.model, &prompt).await?;
 
         // For structured output tasks, parse the generated text as JSON
         match req.task_type {
@@ -460,7 +462,10 @@ mod tests {
         let at_threshold = "a".repeat(32_000); // 32000 / 4 = 8000 tokens, NOT > 8000
         let approx_tokens = at_threshold.len() / 4;
         assert_eq!(approx_tokens, 8000);
-        assert!(approx_tokens <= 8000, "text at threshold should not trigger chunking");
+        assert!(
+            approx_tokens <= 8000,
+            "text at threshold should not trigger chunking"
+        );
 
         // Text above threshold SHOULD trigger chunking.
         let long_text = "a".repeat(32_004); // 32004 / 4 = 8001 tokens > 8000

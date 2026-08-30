@@ -58,12 +58,17 @@ impl AutosaveController {
         Ok(record)
     }
 
-    pub fn validate(&self, checkpoint_id: &str) -> Result<AutosaveValidationReport, PlatformLayerError> {
+    pub fn validate(
+        &self,
+        checkpoint_id: &str,
+    ) -> Result<AutosaveValidationReport, PlatformLayerError> {
         let record = self
             .records
             .iter()
             .find(|record| record.checkpoint_id == checkpoint_id)
-            .ok_or_else(|| PlatformLayerError::NotFound(format!("autosave checkpoint {checkpoint_id}")))?;
+            .ok_or_else(|| {
+                PlatformLayerError::NotFound(format!("autosave checkpoint {checkpoint_id}"))
+            })?;
 
         let mut checks = vec![
             "Checkpoint record exists".to_string(),

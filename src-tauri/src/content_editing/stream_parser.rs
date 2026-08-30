@@ -71,22 +71,35 @@ pub fn find_text_operations(stream: &[u8]) -> Vec<TextOperation> {
             // Parse font name.
             let name_start = i + 1;
             let mut j = name_start;
-            while j < stream.len() && !stream[j].is_ascii_whitespace() && stream[j] != b'/' && stream[j] != b'(' && stream[j] != b'[' {
+            while j < stream.len()
+                && !stream[j].is_ascii_whitespace()
+                && stream[j] != b'/'
+                && stream[j] != b'('
+                && stream[j] != b'['
+            {
                 j += 1;
             }
             let font_name = String::from_utf8_lossy(&stream[name_start..j]).to_string();
 
             // Look ahead for "size Tf" pattern.
             let mut k = j;
-            while k < stream.len() && stream[k].is_ascii_whitespace() { k += 1; }
+            while k < stream.len() && stream[k].is_ascii_whitespace() {
+                k += 1;
+            }
             // Parse number.
             let num_start = k;
-            while k < stream.len() && (stream[k].is_ascii_digit() || stream[k] == b'.' || stream[k] == b'-') { k += 1; }
+            while k < stream.len()
+                && (stream[k].is_ascii_digit() || stream[k] == b'.' || stream[k] == b'-')
+            {
+                k += 1;
+            }
             if k > num_start {
                 let num_str = String::from_utf8_lossy(&stream[num_start..k]).to_string();
                 // Look for "Tf" after the number.
                 let mut m = k;
-                while m < stream.len() && stream[m].is_ascii_whitespace() { m += 1; }
+                while m < stream.len() && stream[m].is_ascii_whitespace() {
+                    m += 1;
+                }
                 if m + 1 < stream.len() && stream[m] == b'T' && stream[m + 1] == b'f' {
                     current_font = Some(font_name);
                     current_size = num_str.parse().ok();
@@ -104,7 +117,9 @@ pub fn find_text_operations(stream: &[u8]) -> Vec<TextOperation> {
             if let Some((text, str_end)) = parse_pdf_string(stream, i) {
                 // Look ahead for Tj, ' or " operators.
                 let mut k = str_end;
-                while k < stream.len() && stream[k].is_ascii_whitespace() { k += 1; }
+                while k < stream.len() && stream[k].is_ascii_whitespace() {
+                    k += 1;
+                }
                 // ' (single quote) is a one-byte operator.
                 if k < stream.len() && stream[k] == b'\'' {
                     let op_index = ops.len();
@@ -165,7 +180,9 @@ pub fn find_text_operations(stream: &[u8]) -> Vec<TextOperation> {
         if stream[i] == b'<' && (i + 1 >= stream.len() || stream[i + 1] != b'<') {
             let hex_start = i;
             let mut j = i + 1;
-            while j < stream.len() && stream[j] != b'>' { j += 1; }
+            while j < stream.len() && stream[j] != b'>' {
+                j += 1;
+            }
             if j < stream.len() {
                 let hex_end = j + 1; // past the '>'
                 let hex_content = &stream[i + 1..j];
@@ -173,7 +190,9 @@ pub fn find_text_operations(stream: &[u8]) -> Vec<TextOperation> {
                 let decoded = decode_hex_string(hex_content);
                 // Look ahead for Tj operator.
                 let mut k = hex_end;
-                while k < stream.len() && stream[k].is_ascii_whitespace() { k += 1; }
+                while k < stream.len() && stream[k].is_ascii_whitespace() {
+                    k += 1;
+                }
                 if k + 1 < stream.len() && stream[k] == b'T' && stream[k + 1] == b'j' {
                     // Hex-encoded text — store as hex representation.
                     let text = String::from_utf8(decoded.clone())
@@ -206,7 +225,6 @@ pub fn find_text_operations(stream: &[u8]) -> Vec<TextOperation> {
             let mut j = i + 1;
             let mut array_text = String::new();
             let mut first_str_start: Option<usize> = None;
-            let mut last_str_end = j;
 
             while j < stream.len() && stream[j] != b']' {
                 if stream[j] == b'(' {
@@ -215,7 +233,6 @@ pub fn find_text_operations(stream: &[u8]) -> Vec<TextOperation> {
                     }
                     if let Some((s, end)) = parse_pdf_string(stream, j) {
                         array_text.push_str(&s);
-                        last_str_end = end;
                         j = end;
                         continue;
                     }
@@ -225,9 +242,11 @@ pub fn find_text_operations(stream: &[u8]) -> Vec<TextOperation> {
 
             if j < stream.len() && stream[j] == b']' {
                 j += 1; // skip ]
-                // Look for TJ.
+                        // Look for TJ.
                 let mut k = j;
-                while k < stream.len() && stream[k].is_ascii_whitespace() { k += 1; }
+                while k < stream.len() && stream[k].is_ascii_whitespace() {
+                    k += 1;
+                }
                 if k + 1 < stream.len() && stream[k] == b'T' && stream[k + 1] == b'J' {
                     if !array_text.is_empty() {
                         let op_index = ops.len();
@@ -261,7 +280,9 @@ pub fn find_text_operations(stream: &[u8]) -> Vec<TextOperation> {
 fn decode_hex_string(hex: &[u8]) -> Vec<u8> {
     let mut nibbles: Vec<u8> = Vec::with_capacity(hex.len());
     for &b in hex {
-        if b.is_ascii_whitespace() { continue; }
+        if b.is_ascii_whitespace() {
+            continue;
+        }
         let n = match b {
             b'0'..=b'9' => b - b'0',
             b'a'..=b'f' => b - b'a' + 10,
@@ -270,7 +291,9 @@ fn decode_hex_string(hex: &[u8]) -> Vec<u8> {
         };
         nibbles.push(n);
     }
-    if nibbles.len() % 2 == 1 { nibbles.push(0); }
+    if nibbles.len() % 2 == 1 {
+        nibbles.push(0);
+    }
     nibbles
         .chunks(2)
         .map(|pair| (pair[0] << 4) | pair[1])
@@ -290,14 +313,21 @@ fn parse_pdf_string(stream: &[u8], start: usize) -> Option<(String, usize)> {
 
     while i < stream.len() && depth > 0 {
         match stream[i] {
-            b'(' => { depth += 1; result.push(b'('); }
+            b'(' => {
+                depth += 1;
+                result.push(b'(');
+            }
             b')' => {
                 depth -= 1;
-                if depth > 0 { result.push(b')'); }
+                if depth > 0 {
+                    result.push(b')');
+                }
             }
             b'\\' => {
                 i += 1;
-                if i >= stream.len() { break; }
+                if i >= stream.len() {
+                    break;
+                }
                 match stream[i] {
                     b'n' => result.push(b'\n'),
                     b'r' => result.push(b'\r'),
@@ -311,7 +341,10 @@ fn parse_pdf_string(stream: &[u8], start: usize) -> Option<(String, usize)> {
                         if i + 1 < stream.len() && stream[i + 1] >= b'0' && stream[i + 1] <= b'7' {
                             i += 1;
                             octal = octal * 8 + (stream[i] - b'0') as u32;
-                            if i + 1 < stream.len() && stream[i + 1] >= b'0' && stream[i + 1] <= b'7' {
+                            if i + 1 < stream.len()
+                                && stream[i + 1] >= b'0'
+                                && stream[i + 1] <= b'7'
+                            {
                                 i += 1;
                                 octal = octal * 8 + (stream[i] - b'0') as u32;
                             }
@@ -339,11 +372,7 @@ fn parse_pdf_string(stream: &[u8], start: usize) -> Option<(String, usize)> {
 
 /// Replace a text operation's string operand in the content stream.
 /// Returns the modified stream bytes.
-pub fn replace_text_in_stream(
-    stream: &[u8],
-    op: &TextOperation,
-    replacement: &str,
-) -> Vec<u8> {
+pub fn replace_text_in_stream(stream: &[u8], op: &TextOperation, replacement: &str) -> Vec<u8> {
     // Default: assume WinAnsi-compatible 8-bit encoding, which is the
     // safest single-byte target for ASCII + Latin-1 text. Non-encodable
     // characters fall back to ASCII-only encoding (every other char is

@@ -36,8 +36,10 @@ fn image_px_bbox_converts_to_pdf_points_with_y_flip() {
 
     // Y flip: a bbox near the TOP of the image (low y in px) should end
     // up near the TOP of the PDF (high y in points).
-    assert!(pdf_y1 > page_h / 2.0,
-        "expected y1 in upper half of page, got y1={pdf_y1:.2} of {page_h:.2}");
+    assert!(
+        pdf_y1 > page_h / 2.0,
+        "expected y1 in upper half of page, got y1={pdf_y1:.2} of {page_h:.2}"
+    );
     // The whole bbox lies inside the page.
     assert!(pdf_x0 >= 0.0 && pdf_x1 <= page_w);
     assert!(pdf_y0 >= 0.0 && pdf_y1 <= page_h);

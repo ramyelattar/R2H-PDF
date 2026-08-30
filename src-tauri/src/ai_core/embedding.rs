@@ -93,7 +93,10 @@ impl EmbeddingRuntime {
             reasons.push("llama-server.exe not found in local-ai/runtimes/llama-cpp/".to_string());
         }
         if !self.model_path.is_file() {
-            reasons.push(format!("Embedding model not found: {}", self.model_path.display()));
+            reasons.push(format!(
+                "Embedding model not found: {}",
+                self.model_path.display()
+            ));
         }
         if self.server_binary.is_some() && self.model_path.is_file() && !self.server_ready {
             reasons.push("Embedding server not started. Call start_server() first.".to_string());
@@ -111,18 +114,26 @@ impl EmbeddingRuntime {
             return Ok(());
         }
 
-        let binary = self.server_binary.as_ref()
+        let binary = self
+            .server_binary
+            .as_ref()
             .ok_or_else(|| "llama-server.exe not found".to_string())?;
 
         if !self.model_path.is_file() {
-            return Err(format!("Embedding model not found: {}", self.model_path.display()));
+            return Err(format!(
+                "Embedding model not found: {}",
+                self.model_path.display()
+            ));
         }
 
         let child = Command::new(binary)
-            .arg("-m").arg(self.model_path.to_string_lossy().as_ref())
+            .arg("-m")
+            .arg(self.model_path.to_string_lossy().as_ref())
             .arg("--embedding")
-            .arg("--host").arg(EMBEDDING_HOST)
-            .arg("--port").arg(EMBEDDING_PORT.to_string())
+            .arg("--host")
+            .arg(EMBEDDING_HOST)
+            .arg("--port")
+            .arg(EMBEDDING_PORT.to_string())
             .arg("--offline")
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
@@ -144,7 +155,10 @@ impl EmbeddingRuntime {
             std::thread::sleep(Duration::from_millis(500));
 
             if let Ok(resp) = reqwest::blocking::Client::new()
-                .get(format!("http://{}:{}/health", EMBEDDING_HOST, EMBEDDING_PORT))
+                .get(format!(
+                    "http://{}:{}/health",
+                    EMBEDDING_HOST, EMBEDDING_PORT
+                ))
                 .timeout(Duration::from_secs(2))
                 .send()
             {
@@ -187,23 +201,30 @@ impl EmbeddingRuntime {
             .map_err(|e| format!("Embedding request failed: {e}"))?;
 
         if !resp.status().is_success() {
-            return Err(format!("Embedding server returned status {}", resp.status()));
+            return Err(format!(
+                "Embedding server returned status {}",
+                resp.status()
+            ));
         }
 
-        let json: serde_json::Value = resp.json()
+        let json: serde_json::Value = resp
+            .json()
             .map_err(|e| format!("Failed to parse embedding response: {e}"))?;
 
-        let data = json.get("data")
+        let data = json
+            .get("data")
             .and_then(|d| d.as_array())
             .ok_or_else(|| "Embedding response missing 'data' array".to_string())?;
 
         let mut results = Vec::with_capacity(texts.len());
         for item in data {
-            let embedding = item.get("embedding")
+            let embedding = item
+                .get("embedding")
                 .and_then(|e| e.as_array())
                 .ok_or_else(|| "Embedding item missing 'embedding' array".to_string())?;
 
-            let values: Vec<f32> = embedding.iter()
+            let values: Vec<f32> = embedding
+                .iter()
                 .filter_map(|v| v.as_f64().map(|f| f as f32))
                 .collect();
 
@@ -219,7 +240,10 @@ impl EmbeddingRuntime {
     /// Generate embedding for a single query text.
     pub fn embed_query(&self, query: &str) -> Result<Vec<f32>, String> {
         let results = self.embed_texts(&[query.to_string()])?;
-        results.into_iter().next().ok_or_else(|| "No embedding returned for query".to_string())
+        results
+            .into_iter()
+            .next()
+            .ok_or_else(|| "No embedding returned for query".to_string())
     }
 }
 

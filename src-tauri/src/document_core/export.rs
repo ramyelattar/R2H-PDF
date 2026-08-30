@@ -830,7 +830,7 @@ pub fn doc_export(
             for id in &report.failed_ids {
                 signatures_failed_items.push(id.clone());
             }
-            warnings.extend(report.warnings.into_iter());
+            warnings.extend(report.warnings);
 
             if report.embedded > 0 {
                 let mut rewritten: Vec<u8> = Vec::new();
