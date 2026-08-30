@@ -1,0 +1,175 @@
+{
+  "schemaVersion": 2,
+  "description": "Human-reviewed duplicate capability mappings. Generated audit CSV files must never be edited manually.",
+  "capabilities": [
+    {
+      "capabilityId": "merge-pdf",
+      "finalOwner": "bentopdf",
+      "reviewStatus": "approved",
+      "r2hFeatureCandidates": [],
+      "r2hBackendSymbols": [],
+      "approvedDeletionLevel": "retired",
+      "rationale": "BentoPDF owns the complete merge utility. R2H backend command retired after zero-consumer proof."
+    },
+    {
+      "capabilityId": "split-pdf",
+      "finalOwner": "bentopdf",
+      "reviewStatus": "approved",
+      "r2hFeatureCandidates": [],
+      "r2hBackendSymbols": [],
+      "approvedDeletionLevel": "retired",
+      "rationale": "BentoPDF owns the complete split utility. R2H backend command retired after zero-consumer proof."
+    },
+    {
+      "capabilityId": "add-watermark",
+      "finalOwner": "bentopdf",
+      "reviewStatus": "approved",
+      "r2hFeatureCandidates": [],
+      "r2hBackendSymbols": [],
+      "approvedDeletionLevel": "retired",
+      "rationale": "BentoPDF owns the complete watermark utility. R2H backend command retired after zero-consumer proof."
+    },
+    {
+      "capabilityId": "header-footer",
+      "finalOwner": "bentopdf",
+      "reviewStatus": "approved",
+      "r2hFeatureCandidates": [],
+      "r2hBackendSymbols": [],
+      "approvedDeletionLevel": "retired",
+      "rationale": "BentoPDF owns the header and footer utility. R2H backend command retired after zero-consumer proof."
+    },
+    {
+      "capabilityId": "compare-pdfs",
+      "finalOwner": "r2h",
+      "reviewStatus": "approved",
+      "r2hFeatureCandidates": [
+        "compare"
+      ],
+      "r2hBackendSymbols": [
+        "pdf_compare_documents",
+        "pdf_get_compare_result",
+        "pdf_clear_compare_result"
+      ],
+      "approvedDeletionLevel": "none",
+      "rationale": "R2H.AI-PDF is the canonical owner of Compare and keeps the active ComparePanel route. BentoPDF remains a separate optional surface; shared backend commands may remain shared."
+    },
+    {
+      "capabilityId": "ocr-pdf",
+      "finalOwner": "r2h",
+      "reviewStatus": "approved",
+      "r2hFeatureCandidates": [
+        "ocr"
+      ],
+      "r2hBackendSymbols": [
+        "ocr_check_availability",
+        "ocr_get_status",
+        "ocr_has_result",
+        "ocr_get_page_text",
+        "ocr_run_page",
+        "ocr_get_all_texts",
+        "pdf_create_ocr_editable_overlays",
+        "pdf_create_ocr_text_layer"
+      ],
+      "approvedDeletionLevel": "none",
+      "rationale": "R2H.AI-PDF is the canonical owner of OCR and keeps the active OcrPanel route. BentoPDF remains a separate optional surface; shared OCR backend services may remain shared."
+    },
+    {
+      "capabilityId": "organize-pdf",
+      "finalOwner": "r2h",
+      "reviewStatus": "approved",
+      "r2hFeatureCandidates": [
+        "page-organizer"
+      ],
+      "r2hBackendSymbols": [],
+      "approvedDeletionLevel": "none",
+      "rationale": "R2H.AI-PDF is the canonical owner of Page Organizer and keeps the active PageOrganizer/usePageOrganizer transaction route. BentoPDF remains a separate optional surface."
+    },
+    {
+      "capabilityId": "sign-pdf",
+      "finalOwner": "r2h",
+      "reviewStatus": "approved",
+      "r2hFeatureCandidates": [
+        "sign-stamp"
+      ],
+      "r2hBackendSymbols": [],
+      "approvedDeletionLevel": "none",
+      "rationale": "R2H.AI-PDF is the canonical owner of visual Sign & Stamp and keeps SignStampPanel. BentoPDF remains a separate optional surface; this R2H path is not certificate-based digital signing."
+    },
+    {
+      "capabilityId": "add-stamps",
+      "finalOwner": "r2h",
+      "reviewStatus": "approved",
+      "r2hFeatureCandidates": [
+        "sign-stamp"
+      ],
+      "r2hBackendSymbols": [],
+      "approvedDeletionLevel": "none",
+      "rationale": "R2H.AI-PDF is the canonical owner of visual stamps through SignStampPanel. BentoPDF remains a separate optional surface."
+    },
+    {
+      "capabilityId": "form-creator",
+      "finalOwner": "r2h",
+      "reviewStatus": "approved",
+      "r2hFeatureCandidates": [
+        "forms"
+      ],
+      "r2hBackendSymbols": [
+        "doc_list_form_fields",
+        "pdf_create_form_field",
+        "pdf_delete_form_field",
+        "pdf_update_form_field_properties"
+      ],
+      "approvedDeletionLevel": "none",
+      "rationale": "R2H.AI-PDF is the canonical owner of Forms and keeps FormsPanel for form creation. BentoPDF remains a separate optional surface; shared form backend commands may remain shared."
+    },
+    {
+      "capabilityId": "form-filler",
+      "finalOwner": "r2h",
+      "reviewStatus": "approved",
+      "r2hFeatureCandidates": [
+        "forms"
+      ],
+      "r2hBackendSymbols": [
+        "doc_list_form_fields"
+      ],
+      "approvedDeletionLevel": "none",
+      "rationale": "R2H.AI-PDF is the canonical owner of Forms and keeps FormsPanel for form filling. BentoPDF remains a separate optional surface; shared form backend commands may remain shared."
+    },
+    {
+      "capabilityId": "edit-pdf",
+      "finalOwner": "bentopdf",
+      "reviewStatus": "blocked",
+      "r2hFeatureCandidates": [
+        "pdf-editor"
+      ],
+      "r2hBackendSymbols": [],
+      "approvedDeletionLevel": "none",
+      "rationale": "R2H editor is deeply integrated with sessions, AI actions, export, review, and persistence. It cannot be deleted as a simple duplicate without a separate product decision."
+    },
+    {
+      "capabilityId": "pdf-to-text",
+      "finalOwner": "bentopdf",
+      "reviewStatus": "blocked",
+      "r2hFeatureCandidates": [],
+      "r2hBackendSymbols": [
+        "doc_extract_text",
+        "doc_extract_all_text"
+      ],
+      "approvedDeletionLevel": "none",
+      "rationale": "Text extraction is an internal dependency of R2H search, AI, RAG, engineering, and review workflows."
+    },
+    {
+      "capabilityId": "prepare-pdf-for-ai",
+      "finalOwner": "bentopdf",
+      "reviewStatus": "blocked",
+      "r2hFeatureCandidates": [],
+      "r2hBackendSymbols": [
+        "ai_build_document_index",
+        "ai_search_document_semantic",
+        "ai_ask_document_rag"
+      ],
+      "approvedDeletionLevel": "none",
+      "rationale": "R2H local AI/RAG is an application-specific retained capability, not a removable duplicate."
+    }
+  ]
+}

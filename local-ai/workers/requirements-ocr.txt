@@ -1,0 +1,10 @@
+# OCR worker dependencies for R2H PDF AI Workstation
+# Install: pip install -r requirements-ocr.txt
+torch>=2.0.0
+torchvision>=0.15.0
+transformers==4.55.0
+Pillow>=10.0.0
+safetensors>=0.4.0
+einops>=0.8.0
+protobuf>=4.25.0
+sentencepiece>=0.2.1

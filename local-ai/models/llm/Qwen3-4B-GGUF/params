@@ -1,0 +1,14 @@
+{
+    "stop": [
+        "<|im_start|>",
+        "<|im_end|>"
+    ],
+    "temperature": 0.6,
+    "min_p" : 0.00,
+    "repeat_penalty" : 1.0,
+    "presence_penalty" : 1.5,
+    "top_k" : 20,
+    "top_p" : 0.95,
+    "num_predict" : 32768,
+    "num_ctx": 40960
+}

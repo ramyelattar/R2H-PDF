@@ -1,0 +1,52 @@
+[
+  {
+    "file": "01-clean-english.pdf",
+    "expected": "R2H OCR CORPUS CLEAN 101",
+    "category": "supported"
+  },
+  {
+    "file": "02-low-resolution-english.pdf",
+    "expected": "R2H OCR LOWRES 202",
+    "category": "unsupported"
+  },
+  {
+    "file": "03-rotated-scan.pdf",
+    "expected": "R2H OCR ROTATED 303",
+    "category": "unsupported"
+  },
+  {
+    "file": "04-noisy-scan.pdf",
+    "expected": "R2H OCR NOISY 404",
+    "category": "supported"
+  },
+  {
+    "file": "05-multi-page-scan.pdf",
+    "expected": "R2H OCR MULTIPAGE 505",
+    "category": "unsupported"
+  },
+  {
+    "file": "06-table-like-scan.pdf",
+    "expected": "PANEL MDB-01 400A",
+    "category": "unsupported"
+  },
+  {
+    "file": "07-mep-title-block.pdf",
+    "expected": "MEP TITLE BLOCK DB-L1",
+    "category": "unsupported"
+  },
+  {
+    "file": "08-arabic-bilingual.pdf",
+    "expected": "ARABIC SAMPLE 808",
+    "category": "unsupported"
+  },
+  {
+    "file": "09-blank-no-text.pdf",
+    "expected": "",
+    "category": "negative"
+  },
+  {
+    "file": "10-image-heavy-negative.pdf",
+    "expected": "",
+    "category": "negative"
+  }
+]

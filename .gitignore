@@ -1,0 +1,149 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Auto-generated entries
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist/
+build/
+*.log
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Sensitive files (auto-detected)
+dist
+node_modules
+
+# BEGIN R2H GENERATED AND LOCAL STATE
+
+# JavaScript dependencies and caches
+node_modules/
+**/node_modules/
+.vite/
+coverage/
+
+# Frontend and packaged output
+dist/
+release/
+generated/
+
+# Audit and test output
+audit-output/
+test-results/
+
+# Rust build output
+target/
+src-tauri/target/
+
+# Python virtual environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Local temporary files
+*.log
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# Local environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# END R2H GENERATED AND LOCAL STATE
+
+# BEGIN R2H LOCAL MODELS AND RUST BUILD OUTPUT
+
+# Local AI model weights remain installed locally but are not stored in Git.
+# Model metadata, manifests, configs and licences remain trackable.
+local-ai/models/**/*.gguf
+local-ai/models/**/*.safetensors
+local-ai/models/**/*.pdiparams
+local-ai/models/**/*.pdmodel
+local-ai/models/**/*.onnx.data
+local-ai/models/**/*.bin
+
+# Rust/Cargo generated build trees, including alternate target directories.
+src-tauri/target/
+src-tauri/target*/
+src-tauri/target-*/
+**/target-test/
+**/target2/
+
+# END R2H LOCAL MODELS AND RUST BUILD OUTPUT
+/local-packages/bentopdf-offline-runtime/
+/generated/bentopdf-offline/
+
+# BEGIN R2H RELEASE HARDENING 2026-08-30
+
+# Installer/binary artifacts are build outputs; hashes and proofs are recorded in release notes.
+release-artifacts/
+
+# Local tool state directories
+.mimosa/
+.v2c/
+.video_agent/
+
+# Tauri generated capability schemas (regenerated on every build)
+src-tauri/gen/schemas/
+
+# Generated demo evidence outputs (regenerable; inputs in demo/input are tracked)
+demo/output/
+
+# License issuer PRIVATE key material must never be committed.
+# The verification PUBLIC key lives in src-tauri/src/license.rs and IS tracked.
+security/license-issuer/private/
+
+# END R2H RELEASE HARDENING 2026-08-30
+local-ai/models/layout/DocLayout-YOLO/

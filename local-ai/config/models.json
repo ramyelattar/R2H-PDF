@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "models": [
+    {
+      "id": "qwen3-4b-q4-k-m",
+      "name": "Qwen3 4B Q4_K_M",
+      "type": "llm",
+      "format": "gguf",
+      "path": "local-ai/models/llm/Qwen3-4B-GGUF/Qwen3-4B-Q4_K_M.gguf",
+      "runtime": "llama.cpp",
+      "contextWindow": 32768,
+      "default": true
+    }
+  ]
+}

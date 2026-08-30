@@ -1,0 +1,100 @@
+mode: paddle
+draw_threshold: 0.5
+metric: COCO
+use_dynamic_shape: false
+Global:
+  model_name: PP-DocLayoutV2
+arch: DETR
+min_subgraph_size: 3
+Preprocess:
+- interp: 2
+  keep_ratio: false
+  target_size:
+  - 800
+  - 800
+  type: Resize
+- mean:
+  - 0.0
+  - 0.0
+  - 0.0
+  norm_type: none
+  std:
+  - 1.0
+  - 1.0
+  - 1.0
+  type: NormalizeImage
+- type: Permute
+label_list:
+- abstract
+- algorithm
+- aside_text
+- chart
+- content
+- display_formula
+- doc_title
+- figure_title
+- footer
+- footer_image
+- footnote
+- formula_number
+- header
+- header_image
+- image
+- inline_formula
+- number
+- paragraph_title
+- reference
+- reference_content
+- seal
+- table
+- text
+- vertical_text
+- vision_footnote
+Hpi:
+  backend_configs:
+    paddle_infer:
+      trt_dynamic_shapes: &id001
+        image:
+        - - 1
+          - 3
+          - 800
+          - 800
+        - - 1
+          - 3
+          - 800
+          - 800
+        - - 8
+          - 3
+          - 800
+          - 800
+        scale_factor:
+        - - 1
+          - 2
+        - - 1
+          - 2
+        - - 8
+          - 2
+      trt_dynamic_shape_input_data:
+        scale_factor:
+        - - 2
+          - 2
+        - - 1
+          - 1
+        - - 0.67
+          - 0.67
+          - 0.67
+          - 0.67
+          - 0.67
+          - 0.67
+          - 0.67
+          - 0.67
+          - 0.67
+          - 0.67
+          - 0.67
+          - 0.67
+          - 0.67
+          - 0.67
+          - 0.67
+          - 0.67
+    tensorrt:
+      dynamic_shapes: *id001

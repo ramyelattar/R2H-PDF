@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Frontend quality gate
+        run: pnpm check
+
+      - name: Frontend unit tests
+        run: pnpm vitest --run
+
+      - name: Rust quality gate
+        working-directory: src-tauri
+        run: cargo check --all-targets
+
+      - name: Rust unit tests
+        working-directory: src-tauri
+        run: cargo test --all-targets
+
+  validate-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Frontend quality gate
+        run: pnpm check
+
+      - name: Frontend unit tests
+        run: pnpm vitest --run
+
+      - name: Rust quality gate
+        working-directory: src-tauri
+        run: cargo check --all-targets
+
+      - name: Rust unit tests
+        working-directory: src-tauri
+        run: cargo test --all-targets

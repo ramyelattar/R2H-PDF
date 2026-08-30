@@ -1,0 +1,90 @@
+[package]
+name = "mupdf"
+version.workspace = true
+edition.workspace = true
+description = "Safe Rust wrapper to MuPDF"
+keywords = ["pdf", "mupdf"]
+license = "AGPL-3.0"
+readme = "README.md"
+repository = "https://github.com/messense/mupdf-rs"
+
+[features]
+default = ["js", "xps", "svg", "cbz", "img", "html", "epub", "system-fonts", "tesseract"]
+
+# Use system libs for all thirdparty libs
+sys-lib = ["mupdf-sys/sys-lib"]
+# Use system freetype
+sys-lib-freetype = ["mupdf-sys/sys-lib-freetype"]
+# Use system gumbo parser
+sys-lib-gumbo = ["mupdf-sys/sys-lib-gumbo"]
+# Use system harfbuzz
+sys-lib-harfbuzz = ["mupdf-sys/sys-lib-harfbuzz"]
+# Use system jpegxr
+sys-lib-jpegxr = ["mupdf-sys/sys-lib-jpegxr"]
+# Use system jbig2dec
+sys-lib-jbig2dec = ["mupdf-sys/sys-lib-jbig2dec"]
+# Use system lcms2
+sys-lib-lcms2 = ["mupdf-sys/sys-lib-lcms2"]
+# Use system libjpeg
+sys-lib-libjpeg = ["mupdf-sys/sys-lib-libjpeg"]
+# Use system openjpeg
+sys-lib-openjpeg = ["mupdf-sys/sys-lib-openjpeg"]
+# Use system zlib
+sys-lib-zlib = ["mupdf-sys/sys-lib-zlib"]
+# Use system leptonica
+sys-lib-leptonica = ["mupdf-sys/sys-lib-leptonica"]
+# Use system tesseract
+sys-lib-tesseract = ["mupdf-sys/sys-lib-tesseract"]
+# Use system zxing-cpp
+sys-lib-zxingcpp = ["mupdf-sys/sys-lib-zxingcpp"]
+# Use system brotli
+sys-lib-brotli = ["mupdf-sys/sys-lib-brotli"]
+
+all-fonts = ["mupdf-sys/all-fonts"]
+system-fonts = ["font-kit"]
+
+js = ["mupdf-sys/js"]
+xps = ["mupdf-sys/xps"]
+svg = ["mupdf-sys/svg"]
+cbz = ["mupdf-sys/cbz"]
+img = ["mupdf-sys/img"]
+html = ["mupdf-sys/html"]
+epub = ["mupdf-sys/epub"]
+tesseract = ["mupdf-sys/tesseract"]
+zxingcpp = ["mupdf-sys/zxingcpp"]
+libarchive = ["mupdf-sys/libarchive"]
+
+# Derive Serialize/Deserialize for a few structs
+serde = ["dep:serde"]
+
+[dependencies]
+mupdf-sys = { version = "0.6.0", path = "mupdf-sys", features = ["zerocopy"] }
+once_cell = "1.3.1"
+bitflags = "2.0.2"
+serde = { version = "1.0.201", features = ["derive"], optional = true }
+zerocopy = { version = "0.8.17", features = ["derive"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+font-kit = { version = "0.14.1", optional = true }
+
+[workspace]
+members = [
+    ".",
+    "mupdf-sys"
+]
+
+[workspace.package]
+version = "0.6.0"
+edition = "2021"
+
+[lints.rustdoc]
+broken_intra_doc_links = "deny"
+
+[dev-dependencies]
+crossbeam-utils = "0.8.1"
+serde_json = "1.0.117"
+
+[[example]]
+name = "extract_stext"
+path = "examples/extract_stext.rs"
+required-features = ["serde"]

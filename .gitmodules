@@ -1,0 +1,3 @@
+[submodule "bentopdf"]
+	path = thirdparty/bentopdf
+	url = https://github.com/alam00000/bentopdf.git

@@ -1,0 +1,142 @@
+/* Menu Bar Container */
+.menu-bar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 28px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(
+    to bottom,
+    rgba(11, 16, 25, 0.95),
+    rgba(9, 13, 21, 0.95)
+  );
+  font-size: 13px;
+  user-select: none;
+  position: relative;
+}
+
+/* Individual Menu Item Container */
+.menu-bar__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* Menu Trigger Button (File, Edit, View) */
+.menu-bar__trigger {
+  padding: 4px 12px;
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: all 120ms ease;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.menu-bar__trigger:hover {
+  background: rgba(183, 201, 232, 0.08);
+  color: var(--text-0);
+}
+
+.menu-bar__trigger--active {
+  background: rgba(116, 162, 255, 0.15);
+  color: var(--accent);
+}
+
+/* Dropdown Menu Container */
+.menu-bar__dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 180px;
+  margin-top: 0;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  z-index: 1000;
+  overflow: hidden;
+  animation: menu-enter 100ms ease;
+}
+
+@keyframes menu-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Menu Item Button */
+.menu-bar__menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-1);
+  text-align: left;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  transition: all 80ms ease;
+  white-space: nowrap;
+}
+
+.menu-bar__menu-item:hover {
+  background: rgba(116, 162, 255, 0.12);
+  color: var(--text-0);
+}
+
+.menu-bar__menu-item:active {
+  background: rgba(116, 162, 255, 0.2);
+}
+
+/* Divider in Dropdown */
+.menu-bar__divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+}
+
+/* Click-outside Overlay */
+.menu-bar__overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 999;
+}
+
+/* Responsive - Ensure menu doesn't overflow on small screens */
+@media (max-width: 600px) {
+  .menu-bar {
+    gap: 2px;
+  }
+
+  .menu-bar__trigger {
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+
+  .menu-bar__dropdown {
+    min-width: 160px;
+  }
+
+  .menu-bar__menu-item {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+}

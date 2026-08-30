@@ -1,0 +1,35 @@
+[
+  {
+    "ruleId": "remote-huggingface",
+    "path": "local-ai\\workers\\paddleocr_vl_worker.py",
+    "exactPattern": "from_pretrained",
+    "classification": "offline-policy-guarded",
+    "reason": "Transformer loaders use a caller-provided local model path; adjacent arguments set local_files_only=True.",
+    "runtimeReachable": true,
+    "mitigation": "Keep local_files_only=True on the AutoProcessor and AutoModelForVision2Seq calls; local OCR model must be bundled.",
+    "owner": "Release QA",
+    "expiryDate": "2026-08-31"
+  },
+  {
+    "ruleId": "telemetry-generic",
+    "path": "src\\types\\shell.ts",
+    "exactPattern": "telemetryMode",
+    "classification": "offline-policy-guarded",
+    "reason": "UI preference type only; no telemetry emitter or external endpoint is implemented.",
+    "runtimeReachable": false,
+    "mitigation": "Security source scan blocks any sender endpoint or external telemetry provider reference.",
+    "owner": "Release QA",
+    "expiryDate": "2026-08-31"
+  },
+  {
+    "ruleId": "remote-trust-code",
+    "path": "local-ai\\workers\\paddleocr_vl_worker.py",
+    "exactPattern": "local_files_only=True",
+    "classification": "offline-policy-guarded",
+    "reason": "PaddleOCR-VL model loading uses local_files_only=True and a bundled local model path.",
+    "runtimeReachable": true,
+    "mitigation": "Keep OCR model assets bundled and reviewed; do not allow runtime downloads.",
+    "owner": "Release QA",
+    "expiryDate": "2026-08-31"
+  }
+]
