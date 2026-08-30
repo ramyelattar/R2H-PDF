@@ -5,6 +5,9 @@ description = "R2H PDF — desktop PDF workstation for legal and engineering doc
 authors = ["R2H Team"]
 edition = "2021"
 exclude = ["target2/", "target-test/"]
+# Two binaries exist (the Tauri app and the DocumentEngine stdio host);
+# Tauri's bundler requires the main binary to be named explicitly.
+default-run = "r2h-pdf"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
