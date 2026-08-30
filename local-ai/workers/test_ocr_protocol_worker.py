@@ -13,6 +13,13 @@ if request.get("mode") == "large_stderr":
     sys.stderr.write("x" * (2 * 1024 * 1024))
     sys.stderr.write("\ndiagnostic-end\n")
     sys.stderr.flush()
+elif request.get("mode") == "stream_then_silence":
+    # One heartbeat line, then total silence: drives the no-progress
+    # watchdog test. The initial write proves the watchdog resets on
+    # activity rather than on process start.
+    sys.stderr.write('{"event":"stage","name":"model_loading"}\n')
+    sys.stderr.flush()
+    time.sleep(60)
 elif request.get("mode") == "sleep":
     time.sleep(60)
 elif request.get("mode") == "spawn_child":

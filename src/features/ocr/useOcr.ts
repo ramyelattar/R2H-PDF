@@ -109,7 +109,7 @@ export function useOcr(deps: UseOcrDeps) {
     const operationId = makeOperationId();
     const cancellationId = operationId;
     const language = "auto";
-    const modelId = availability?.model_id || "PaddleOCR-VL";
+    const modelId = availability?.model_id || "PP-OCRv5";
     inFlightRef.current = true;
     operationRef.current = operationId;
     setState((prev) => ({
@@ -144,7 +144,7 @@ export function useOcr(deps: UseOcrDeps) {
           language,
           model_id: modelId,
           output_format_version: 1,
-          timeout_secs: 120,
+          timeout_secs: modelId.startsWith("PP-OCRv5") ? 600 : 7200,
           cancellation_id: cancellationId,
         });
 

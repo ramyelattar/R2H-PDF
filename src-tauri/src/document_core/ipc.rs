@@ -883,7 +883,8 @@ fn _ipc_phase23_marker() -> CompareMode {
 // ── OCR Commands ────────────────────────────────────────────────────────────
 
 use super::ocr::{
-    operation_temp_path, OcrAvailability, OcrPageResult, OcrRequest, OcrRunContext, OcrState,
+    is_advanced_engine, operation_temp_path, OcrAvailability, OcrPageResult, OcrRequest,
+    OcrRunContext, OcrState,
 };
 
 /// Check if the OCR engine is available, preserving the exact blocked reason.
@@ -1025,7 +1026,16 @@ pub fn ocr_run_page(
     .map_err(|e| format!("Failed to save page image: {e}"))?;
 
     // Run OCR with the live session/page context and cancellation registry.
-    let timeout_secs = request.timeout_secs.unwrap_or(120).max(1);
+    // Timeout policy is per engine: the fast standard path finishes normal
+    // pages in seconds (hard cap 600 s), while the advanced PaddleOCR-VL
+    // document-analysis backend legitimately needs much longer and is bounded
+    // separately (2 h). Explicit request timeouts still win.
+    let default_timeout_secs = if is_advanced_engine(&request.model_id) {
+        7200
+    } else {
+        600
+    };
+    let timeout_secs = request.timeout_secs.unwrap_or(default_timeout_secs).max(1);
     let context = OcrRunContext {
         operation_id: request.operation_id.clone(),
         document_id,
@@ -1404,7 +1414,12 @@ pub fn pdf_create_ocr_text_layer(
 
 /// Save raw RGBA pixel data as a PNG file.
 /// Uses a minimal PNG encoder (uncompressed) to avoid adding image crate deps.
-fn save_rgba_as_png(
+/// Production OCR image writer: flattens the rendered RGBA (MuPDF leaves the
+/// background transparent) over white and writes a PPM payload at `path`.
+/// The OCR worker decodes by content, and the extension stays `.png` for the
+/// operation-isolated temp naming. Public so integration tests exercise the
+/// exact production bytes.
+pub fn save_rgba_as_png(
     pixels: &[u8],
     width: u32,
     height: u32,
@@ -1422,10 +1437,20 @@ fn save_rgba_as_png(
     write!(file, "P6\n{} {}\n255\n", width, height)
         .map_err(|e| format!("Failed to write PPM header: {e}"))?;
 
-    // Write RGB pixels (skip alpha channel).
+    // MuPDF renders pages with a transparent background (alpha=0). Flatten
+    // every pixel over WHITE before dropping alpha, otherwise the OCR worker
+    // receives a black page with sparse white text. The canvas viewer never
+    // had this problem because the webview composites alpha over its own
+    // white page background.
     for chunk in pixels.chunks(4) {
         if chunk.len() >= 3 {
-            file.write_all(&chunk[..3])
+            let alpha = chunk[3] as u16;
+            let inv_alpha = 255u16.saturating_sub(alpha);
+            let mut rgb = [0u8; 3];
+            for (channel, value) in rgb.iter_mut().enumerate() {
+                *value = ((chunk[channel] as u16 * alpha + 255 * inv_alpha) / 255) as u8;
+            }
+            file.write_all(&rgb)
                 .map_err(|e| format!("Failed to write pixel data: {e}"))?;
         }
     }

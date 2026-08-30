@@ -17,6 +17,21 @@ use crate::ai_core::local_ai_paths::resolve_local_ai_root_diagnostics;
 
 use super::errors::DocumentCoreError;
 
+/// Default (fast, CPU) standard OCR engine — PP-OCRv5 mobile det+rec.
+pub const STANDARD_MODEL_ID: &str = "PP-OCRv5";
+/// Optional advanced document-analysis OCR backend. Never the default.
+pub const ADVANCED_MODEL_ID: &str = "PaddleOCR-VL";
+/// No-progress watchdog for the standard fast path: a healthy PP-OCRv5 run
+/// streams stage events continuously, so this only fires on a hung worker.
+pub const STANDARD_OCR_WATCHDOG_SECS: u64 = 90;
+
+/// Which OCR model pack an availability check describes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PackKind {
+    Standard,
+    Advanced,
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -412,10 +427,15 @@ pub struct OcrEngine {
     python_path: PathBuf,
     worker_path: PathBuf,
     model_path: PathBuf,
+    standard_worker_path: PathBuf,
+    standard_det_model_path: PathBuf,
+    standard_rec_model_path: PathBuf,
     resource_source: String,
     model_id: String,
     smoke_engine: Option<String>,
     default_dpi: u32,
+    standard_batch_size: usize,
+    standard_cpu_threads: u32,
 }
 
 impl Default for OcrEngine {
@@ -437,16 +457,133 @@ impl OcrEngine {
             python_path,
             worker_path,
             model_path,
+            standard_worker_path: local_ai_root.join("workers/ppocr_v5_worker.py"),
+            standard_det_model_path: local_ai_root.join("models/ocr/PP-OCRv5_mobile_det"),
+            standard_rec_model_path: local_ai_root.join("models/ocr/arabic_PP-OCRv5_mobile_rec"),
             resource_source: resolution.source,
             model_id: "PaddleOCR-VL".to_string(),
             smoke_engine: None,
             default_dpi: 200,
+            standard_batch_size: 8,
+            standard_cpu_threads: 4,
         }
     }
 
     /// Return a structured availability result for the optional local OCR pack.
-    /// This intentionally does not validate unrelated LLM or embedding assets.
+    /// The STANDARD fast PP-OCRv5 path is checked first; if it is not fully
+    /// installed the ADVANCED PaddleOCR-VL pack is reported instead so an
+    /// advanced-only installation still yields a usable OCR engine.
     pub fn check_availability(&self) -> OcrAvailability {
+        let standard = self.check_standard_availability();
+        if standard.available {
+            return standard;
+        }
+        let advanced = self.check_availability_for_pack(PackKind::Advanced);
+        if advanced.available {
+            return OcrAvailability {
+                message: format!(
+                    "Standard fast OCR ({STANDARD_MODEL_ID}) is unavailable; falling back to the advanced {} engine. Standard detail: {}",
+                    ADVANCED_MODEL_ID, standard.message
+                ),
+                ..advanced
+            };
+        }
+        // Neither pack is usable: report the standard failure because that is
+        // the default path users should fix first.
+        standard
+    }
+
+    /// Availability of the fast standard PP-OCRv5 pack (default OCR engine).
+    pub fn check_standard_availability(&self) -> OcrAvailability {
+        self.check_availability_for_pack(PackKind::Standard)
+    }
+
+    /// Availability of the advanced PaddleOCR-VL pack.
+    pub fn check_availability_advanced(&self) -> OcrAvailability {
+        self.check_availability_for_pack(PackKind::Advanced)
+    }
+
+    fn check_availability_for_pack(&self, pack: PackKind) -> OcrAvailability {
+        if !cfg!(target_os = "windows") {
+            return self.unavailable(
+                OcrAvailabilityStatus::UnsupportedPlatform,
+                "The packaged OCR runtime is supported on Windows only.",
+                vec![],
+            );
+        }
+
+        if self.resource_source == "unresolved_relative" && !self.worker_path.is_absolute() {
+            return self.unavailable(
+                OcrAvailabilityStatus::ResourceResolutionFailed,
+                "The optional OCR resource pack could not be resolved from a supported application location.",
+                vec![],
+            );
+        }
+
+        match pack {
+            PackKind::Standard => self.check_standard_pack(),
+            PackKind::Advanced => self.check_advanced_pack(),
+        }
+    }
+
+    fn check_standard_pack(&self) -> OcrAvailability {
+        if !self.standard_worker_path.is_file() {
+            return self.unavailable(
+                OcrAvailabilityStatus::MissingWorker,
+                "The standard fast OCR worker is not installed in the configured OCR pack.",
+                vec!["workers/ppocr_v5_worker.py".to_string()],
+            );
+        }
+        for (label, dir) in [
+            ("detection", &self.standard_det_model_path),
+            ("recognition", &self.standard_rec_model_path),
+        ] {
+            if !dir.is_dir() {
+                return self.unavailable(
+                    OcrAvailabilityStatus::MissingModel,
+                    &format!("The standard OCR {label} model directory is missing."),
+                    vec![format!(
+                        "models/ocr/{}",
+                        dir.file_name().unwrap_or_default().to_string_lossy()
+                    )],
+                );
+            }
+            let mut missing_assets = missing_files(dir, &["inference.pdiparams"]);
+            let has_program =
+                dir.join("inference.json").is_file() || dir.join("inference.pdmodel").is_file();
+            if !has_program {
+                missing_assets.push("inference.json".to_string());
+            }
+            if !missing_assets.is_empty() {
+                return self.unavailable(
+                    OcrAvailabilityStatus::MissingModel,
+                    &format!("The standard OCR {label} model files are incomplete."),
+                    missing_assets,
+                );
+            }
+            if label == "recognition" && !file_is_non_empty(&dir.join("inference.yml")) {
+                return self.unavailable(
+                    OcrAvailabilityStatus::MissingModel,
+                    "The standard OCR recognition dictionary (inference.yml) is missing.",
+                    vec!["inference.yml".to_string()],
+                );
+            }
+        }
+        // The Python dependency probe for this pack runs inside the worker:
+        // a runtime without paddle/cv2/numpy/PIL fails fast with the
+        // DEPENDENCY_MISSING error code on the first OCR run, which the UI
+        // surfaces verbatim. Availability therefore covers the on-disk pack.
+        OcrAvailability {
+            status: OcrAvailabilityStatus::Available,
+            available: true,
+            message: "The standard fast OCR engine (PP-OCRv5, CPU) assets are ready.".to_string(),
+            resource_source: self.resource_source.clone(),
+            model_id: STANDARD_MODEL_ID.to_string(),
+            missing_assets: vec![],
+        }
+    }
+
+    fn check_advanced_pack(&self) -> OcrAvailability {
         if !cfg!(target_os = "windows") {
             return self.unavailable(
                 OcrAvailabilityStatus::UnsupportedPlatform,
@@ -540,10 +677,10 @@ impl OcrEngine {
         OcrAvailability {
             status: OcrAvailabilityStatus::Available,
             available: true,
-            message: "The local OCR worker, Python runtime, model, and processor assets are ready."
+            message: "The advanced OCR engine (PaddleOCR-VL) worker, Python runtime, model, and processor assets are ready."
                 .to_string(),
             resource_source: self.resource_source.clone(),
-            model_id: self.model_id.clone(),
+            model_id: ADVANCED_MODEL_ID.to_string(),
             missing_assets: vec![],
         }
     }
@@ -612,7 +749,15 @@ impl OcrEngine {
             ));
         }
 
-        let availability = self.check_availability();
+        // Route by the requested engine: everything that is not the
+        // advanced PaddleOCR-VL backend — including the default — runs on
+        // the fast standard PP-OCRv5 path.
+        let advanced = is_advanced_engine(&context.model_id);
+        let availability = if advanced {
+            self.check_availability_advanced()
+        } else {
+            self.check_standard_availability()
+        };
         if !availability.available {
             return Err(DocumentCoreError::OcrError(format!(
                 "[OCR_{}] {}",
@@ -623,40 +768,75 @@ impl OcrEngine {
 
         // Check cache only after the current resource boundary has been
         // validated. A stale in-memory result must never hide an unavailable
-        // worker/model installation.
-        if !force {
-            if let Some(cached) = self.cache.get(&context.session_id, context.page_index) {
-                return Ok(cached.clone());
-            }
+        // worker/model installation, and a result from the other engine
+        // must never be reused across a routing change.
+        let cache_engine = if advanced {
+            ADVANCED_MODEL_ID
+        } else {
+            STANDARD_MODEL_ID
+        };
+        let cached = self.cache.get(&context.session_id, context.page_index);
+        if !force && cached_result_matches_engine(cached, cache_engine) {
+            return Ok(cached
+                .expect("engine match implies a cached result")
+                .clone());
         }
 
+        let watchdog_no_progress = if advanced {
+            None
+        } else {
+            Some(Duration::from_secs(STANDARD_OCR_WATCHDOG_SECS))
+        };
         // Build worker request JSON.
-        let mut request = serde_json::json!({
-            "image_path": image_path.to_string_lossy(),
-            "model_path": self.model_path.to_string_lossy(),
-            "schema_version": 1,
-            "output_format_version": 1,
-            "operation_id": context.operation_id.clone(),
-            "page_index": context.page_index,
-            "language": context.language.clone(),
-            "model_id": context.model_id.clone(),
-            "timeout_secs": context.timeout_secs,
-            "cancellation_id": context.cancellation_id.clone(),
-        });
-        if let Some(engine) = &self.smoke_engine {
-            request["engine"] = serde_json::Value::String(engine.clone());
-        }
-
-        let request_json = serde_json::to_string(&request).map_err(|e| {
-            DocumentCoreError::OcrError(format!("Failed to serialize request: {e}"))
-        })?;
+        let request_json = if advanced {
+            let mut request = serde_json::json!({
+                "image_path": image_path.to_string_lossy(),
+                "model_path": self.model_path.to_string_lossy(),
+                "schema_version": 1,
+                "output_format_version": 1,
+                "operation_id": context.operation_id.clone(),
+                "page_index": context.page_index,
+                "language": context.language.clone(),
+                "model_id": context.model_id.clone(),
+                "timeout_secs": context.timeout_secs,
+                "cancellation_id": context.cancellation_id.clone(),
+            });
+            if let Some(engine) = &self.smoke_engine {
+                request["engine"] = serde_json::Value::String(engine.clone());
+            }
+            request.to_string()
+        } else {
+            serde_json::json!({
+                "image_path": image_path.to_string_lossy(),
+                "det_model_path": self.standard_det_model_path.to_string_lossy(),
+                "rec_model_path": self.standard_rec_model_path.to_string_lossy(),
+                "schema_version": 1,
+                "output_format_version": 1,
+                "operation_id": context.operation_id.clone(),
+                "page_index": context.page_index,
+                "language": context.language.clone(),
+                "model_id": context.model_id.clone(),
+                "timeout_secs": context.timeout_secs,
+                "cancellation_id": context.cancellation_id.clone(),
+                "batch_size": self.standard_batch_size,
+                "cpu_threads": self.standard_cpu_threads,
+                "watchdog_no_progress_secs": STANDARD_OCR_WATCHDOG_SECS,
+            })
+            .to_string()
+        };
 
         let started = Instant::now();
+        let worker_path = if advanced {
+            &self.worker_path
+        } else {
+            &self.standard_worker_path
+        };
         let output = match run_worker_process_with_cancel(
             &self.python_path,
-            &self.worker_path,
+            worker_path,
             &request_json,
             Duration::from_secs(context.timeout_secs.max(1)),
+            watchdog_no_progress,
             || cancellation_requested(cancellations, context.cancellation_id.as_deref()),
         ) {
             Ok(output) => output,
@@ -680,6 +860,13 @@ impl OcrEngine {
                 return Err(DocumentCoreError::OcrError(format!(
                     "[OCR_TIMEOUT] OCR worker timed out after {} seconds; {}",
                     context.timeout_secs.max(1),
+                    output.summary()
+                )))
+            }
+            Err(WorkerProcessFailure::NoProgress(output)) => {
+                return Err(DocumentCoreError::OcrError(format!(
+                    "[OCR_NO_PROGRESS] OCR worker reported no progress for {} seconds and was stopped; {}",
+                    STANDARD_OCR_WATCHDOG_SECS,
                     output.summary()
                 )))
             }
@@ -846,10 +1033,27 @@ enum WorkerProcessFailure {
     Input(String, WorkerProcessOutput),
     Wait(String),
     Timeout(WorkerProcessOutput),
+    /// The process was healthy but stopped emitting progress for longer than
+    /// the no-progress watchdog allows (standard fast OCR path only).
+    NoProgress(WorkerProcessOutput),
     Cancelled(WorkerProcessOutput),
 }
 
-fn read_worker_stream<R: Read>(mut reader: R) -> CapturedWorkerStream {
+/// Milliseconds since the Unix epoch; used for the worker activity clock.
+fn now_unix_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_millis() as u64)
+        .unwrap_or_default()
+}
+
+/// Capture a worker output stream while refreshing the shared no-progress
+/// clock on every read, so a streaming worker is never mistaken for a dead
+/// one (stage events, recogniser logs, and diagnostics all count).
+fn read_worker_stream_with_heartbeat<R: Read>(
+    mut reader: R,
+    last_activity_ms: &AtomicU64,
+) -> CapturedWorkerStream {
     let mut bytes = Vec::new();
     let mut total_len = 0usize;
     let mut buffer = [0u8; 8192];
@@ -858,6 +1062,7 @@ fn read_worker_stream<R: Read>(mut reader: R) -> CapturedWorkerStream {
             Ok(0) | Err(_) => break,
             Ok(read) => {
                 total_len = total_len.saturating_add(read);
+                last_activity_ms.store(now_unix_ms(), Ordering::Relaxed);
                 if bytes.len() < MAX_WORKER_CAPTURE_BYTES {
                     let remaining = MAX_WORKER_CAPTURE_BYTES - bytes.len();
                     bytes.extend_from_slice(&buffer[..read.min(remaining)]);
@@ -912,6 +1117,7 @@ fn run_worker_process_with_cancel<F>(
     worker_path: &Path,
     request_json: &str,
     timeout: Duration,
+    no_progress_timeout: Option<Duration>,
     mut cancellation_requested: F,
 ) -> Result<WorkerProcessOutput, WorkerProcessFailure>
 where
@@ -943,8 +1149,17 @@ where
             ));
         }
     };
-    let stdout_thread = std::thread::spawn(move || read_worker_stream(stdout));
-    let stderr_thread = std::thread::spawn(move || read_worker_stream(stderr));
+    // Both stream readers feed the shared activity clock; any output counts
+    // as progress (stage events, recogniser logs, diagnostics).
+    let last_activity_ms = Arc::new(AtomicU64::new(now_unix_ms()));
+    let stdout_thread = {
+        let last_activity = Arc::clone(&last_activity_ms);
+        std::thread::spawn(move || read_worker_stream_with_heartbeat(stdout, &last_activity))
+    };
+    let stderr_thread = {
+        let last_activity = Arc::clone(&last_activity_ms);
+        std::thread::spawn(move || read_worker_stream_with_heartbeat(stderr, &last_activity))
+    };
 
     let mut stdin = match child.stdin.take() {
         Some(stdin) => stdin,
@@ -981,7 +1196,17 @@ where
                 failure_kind = Some("timeout");
                 break terminate_worker_tree(&mut child);
             }
-            Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+            Ok(None) => {
+                if let Some(no_progress) = no_progress_timeout {
+                    let last = last_activity_ms.load(Ordering::Relaxed);
+                    let now = now_unix_ms();
+                    if now.saturating_sub(last) > no_progress.as_millis() as u64 {
+                        failure_kind = Some("no_progress");
+                        break terminate_worker_tree(&mut child);
+                    }
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
             Err(error) => {
                 let terminal_status = terminate_worker_tree(&mut child);
                 let _ = collect_worker_output(
@@ -999,6 +1224,7 @@ where
         .map_err(WorkerProcessFailure::Wait)?;
     match failure_kind {
         Some("timeout") => Err(WorkerProcessFailure::Timeout(output)),
+        Some("no_progress") => Err(WorkerProcessFailure::NoProgress(output)),
         Some("cancelled") => Err(WorkerProcessFailure::Cancelled(output)),
         _ => Ok(output),
     }
@@ -1013,13 +1239,22 @@ fn run_worker_process_for_test(
 ) -> Result<WorkerProcessOutput, String> {
     let request_json = std::str::from_utf8(request_json)
         .map_err(|error| format!("test request was not UTF-8: {error}"))?;
-    run_worker_process_with_cancel(python_path, worker_path, request_json, timeout, || false)
-        .map_err(|failure| format!("worker protocol failure: {failure:?}"))
+    run_worker_process_with_cancel(
+        python_path,
+        worker_path,
+        request_json,
+        timeout,
+        None,
+        || false,
+    )
+    .map_err(|failure| format!("worker protocol failure: {failure:?}"))
 }
 
 fn resolve_python_path(local_ai_root: &Path) -> PathBuf {
     for relative in [
         "runtimes/python/python.exe",
+        // Standard Windows venv layout (uv / python -m venv).
+        "runtimes/python/Scripts/python.exe",
         "runtime/python.exe",
         "python/python.exe",
     ] {
@@ -1038,6 +1273,22 @@ fn file_is_non_empty(path: &Path) -> bool {
             .unwrap_or(false)
 }
 
+/// True when a run request explicitly targets the advanced (PaddleOCR-VL)
+/// backend. Everything else — including the default — routes to the fast
+/// standard PP-OCRv5 path.
+pub fn is_advanced_engine(model_id: &str) -> bool {
+    let id = model_id.to_ascii_lowercase();
+    id.contains("paddle") && id.contains("vl")
+}
+
+/// A cached page result may only satisfy a run request that targets the same
+/// engine. A cached result from the other engine (or no cache entry at all)
+/// must trigger a fresh run.
+fn cached_result_matches_engine(cached: Option<&OcrPageResult>, engine: &str) -> bool {
+    cached
+        .map(|result| result.engine.eq_ignore_ascii_case(engine))
+        .unwrap_or(false)
+}
 fn missing_files(root: &Path, relative_paths: &[&str]) -> Vec<String> {
     relative_paths
         .iter()
@@ -1372,9 +1623,159 @@ mod tests {
     fn structured_availability_classifies_missing_worker() {
         let mut engine = OcrEngine::new();
         engine.worker_path = PathBuf::from("/nonexistent/ocr-worker.py");
+        engine.standard_worker_path = PathBuf::from("/nonexistent/ppocr-worker.py");
         let result = engine.check_availability();
         assert_eq!(result.status, OcrAvailabilityStatus::MissingWorker);
         assert!(!result.available);
+    }
+
+    #[test]
+    fn standard_pack_missing_worker_reports_missing_even_when_advanced_exists() {
+        let mut engine = OcrEngine::new();
+        engine.standard_worker_path = PathBuf::from("/nonexistent/ppocr_v5_worker.py");
+        let standard = engine.check_standard_availability();
+        assert_eq!(standard.status, OcrAvailabilityStatus::MissingWorker);
+        assert!(!standard.available);
+        // The default availability falls back to the advanced pack when the
+        // standard one is absent (this machine may have the advanced pack).
+        let combined = engine.check_availability();
+        assert!(
+            combined.available == engine.check_availability_advanced().available,
+            "combined availability must track the advanced fallback"
+        );
+    }
+
+    #[test]
+    fn standard_pack_missing_model_files_are_listed() {
+        let mut engine = OcrEngine::new();
+        let empty_dir = std::env::temp_dir().join(format!(
+            "r2h-ocr-missing-models-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|value| value.as_millis())
+                .unwrap_or_default()
+        ));
+        let _ = std::fs::create_dir_all(&empty_dir);
+        engine.standard_det_model_path = empty_dir.join("det");
+        engine.standard_rec_model_path = empty_dir.join("rec");
+        let _ = std::fs::create_dir_all(&engine.standard_det_model_path);
+        let _ = std::fs::create_dir_all(&engine.standard_rec_model_path);
+        let result = engine.check_standard_availability();
+        assert_eq!(result.status, OcrAvailabilityStatus::MissingModel);
+        assert!(result
+            .missing_assets
+            .iter()
+            .any(|asset| asset.contains("inference")));
+        let _ = std::fs::remove_dir_all(&empty_dir);
+    }
+
+    #[test]
+    fn is_advanced_engine_routes_only_paddleocr_vl() {
+        assert!(is_advanced_engine("PaddleOCR-VL"));
+        assert!(is_advanced_engine("paddleocr_vl"));
+        assert!(!is_advanced_engine("PP-OCRv5"));
+        assert!(!is_advanced_engine(""));
+    }
+
+    #[test]
+    fn no_progress_watchdog_stops_silent_worker_and_captures_output() {
+        let worker = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../local-ai/workers/test_ocr_protocol_worker.py");
+        let started = Instant::now();
+        let error = run_worker_process_with_cancel(
+            Path::new("python"),
+            &worker,
+            r#"{"mode":"stream_then_silence","operation_id":"watchdog-op","page_index":0}"#,
+            Duration::from_secs(30),
+            Some(Duration::from_secs(1)),
+            || false,
+        )
+        .expect_err("silent worker must trip the no-progress watchdog");
+        let output = match error {
+            WorkerProcessFailure::NoProgress(output) => output,
+            other => panic!("expected no-progress termination, got {other:?}"),
+        };
+        // The initial stage line must have been captured as activity/output.
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("model_loading"),
+            "heartbeat line should be captured: {stderr}"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(20),
+            "watchdog must fire well before the hard timeout"
+        );
+    }
+
+    #[test]
+    fn cancellation_stops_worker_and_reports_cancelled() {
+        let worker = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../local-ai/workers/test_ocr_protocol_worker.py");
+        // The cancellation closure flips to true right after the first poll,
+        // mirroring how the shared registry flips when ocr_cancel fires from
+        // another thread while a run is in flight.
+        let polls = std::sync::atomic::AtomicUsize::new(0);
+        let started = Instant::now();
+        let error = run_worker_process_with_cancel(
+            Path::new("python"),
+            &worker,
+            r#"{"mode":"sleep","operation_id":"cancel-op","page_index":0}"#,
+            Duration::from_secs(60),
+            None,
+            || polls.fetch_add(1, Ordering::Relaxed) > 0,
+        );
+        let error = error.expect_err("sleeping worker should be cancellable");
+        assert!(
+            matches!(error, WorkerProcessFailure::Cancelled(_)),
+            "expected cancellation, got {error:?}"
+        );
+        assert!(
+            started.elapsed() < Duration::from_secs(30),
+            "cancellation must not wait for the hard timeout"
+        );
+    }
+
+    #[test]
+    fn arabic_ocr_result_passes_validation_with_unicode_geometry() {
+        let response: WorkerResponse = serde_json::from_value(serde_json::json!({
+            "ok": true,
+            "schema_version": 1,
+            "status": "completed",
+            "operation_id": "ar-op",
+            "page_index": 0,
+            "engine": "PP-OCRv5",
+            "text": "ملف تجربة R2H 123",
+            "confidence": 0.93,
+            "blocks": [{
+                "id": "ocr-0-0",
+                "text": "ملف تجربة",
+                "bbox": {"x": 100.0, "y": 200.0, "width": 400.5, "height": 48.0},
+                "confidence": 0.95,
+                "block_type": "text_line",
+                "reading_order": 0
+            }]
+        }))
+        .expect("arabic result json should deserialize");
+        let validated = validate_worker_response(response, "ar-op", 0, 1224, 1584, false)
+            .expect("arabic result should pass strict validation");
+        let text = validated.text.as_deref().unwrap_or_default();
+        assert!(text.contains("ملف تجربة"), "arabic text lost: {text}");
+    }
+
+    #[test]
+    fn cached_result_engine_mismatch_is_not_reused() {
+        let mut cached = test_result("cache-session", 0, "cached text");
+        cached.engine = STANDARD_MODEL_ID.to_string();
+        assert!(cached_result_matches_engine(
+            Some(&cached),
+            STANDARD_MODEL_ID
+        ));
+        assert!(!cached_result_matches_engine(
+            Some(&cached),
+            ADVANCED_MODEL_ID
+        ));
+        assert!(!cached_result_matches_engine(None, STANDARD_MODEL_ID));
     }
 
     #[test]
@@ -1413,6 +1814,7 @@ mod tests {
             &worker,
             r#"{"mode":"spawn_child","operation_id":"timeout-op","page_index":0}"#,
             Duration::from_secs(1),
+            None,
             || false,
         )
         .expect_err("sleeping worker should hit the bounded timeout");
@@ -1608,6 +2010,7 @@ mod tests {
     fn ocr_engine_check_availability_missing_worker() {
         let mut engine = OcrEngine::new();
         engine.worker_path = PathBuf::from("/nonexistent/worker.py");
+        engine.standard_worker_path = PathBuf::from("/nonexistent/ppocr-worker.py");
         let result = engine.check_availability();
         assert_eq!(result.status, OcrAvailabilityStatus::MissingWorker);
     }
@@ -1617,7 +2020,7 @@ mod tests {
         let mut engine = OcrEngine::new();
         engine.worker_path = PathBuf::from(file!()); // Use this file as a "valid" file
         engine.model_path = PathBuf::from("/nonexistent/model");
-        let result = engine.check_availability();
+        let result = engine.check_availability_advanced();
         assert_eq!(result.status, OcrAvailabilityStatus::MissingModel);
     }
 

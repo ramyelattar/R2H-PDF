@@ -147,3 +147,6 @@ security/license-issuer/private/
 
 # END R2H RELEASE HARDENING 2026-08-30
 local-ai/models/layout/DocLayout-YOLO/
+
+# Local OCR CPU runtime (Python venv with paddlepaddle; provisioned locally)
+local-ai/runtimes/python/
