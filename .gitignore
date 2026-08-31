@@ -150,3 +150,5 @@ local-ai/models/layout/DocLayout-YOLO/
 
 # Local OCR CPU runtime (Python venv with paddlepaddle; provisioned locally)
 local-ai/runtimes/python/
+
+local-ai/models/
