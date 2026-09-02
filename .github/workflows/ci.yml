@@ -79,5 +79,3 @@ jobs:
       - name: Rust unit tests
         working-directory: src-tauri
         run: cargo test --all-targets
-
-# GitHub Actions re-index verification
